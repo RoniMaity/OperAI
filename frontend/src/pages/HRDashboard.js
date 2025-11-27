@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import api from '../services/api';
@@ -7,6 +8,7 @@ import { Users, CheckSquare, Calendar, FileText } from 'lucide-react';
 export default function HRDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
@@ -42,7 +44,11 @@ export default function HRDashboard() {
         </div>
 
         <div className="dashboard-grid">
-          <Card className="stat-card bg-card border-border" data-testid="stat-total-employees">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-total-employees"
+            onClick={() => navigate('/employees')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Total Employees</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -53,7 +59,11 @@ export default function HRDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-total-tasks">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-total-tasks"
+            onClick={() => navigate('/tasks')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Total Tasks</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
@@ -64,7 +74,11 @@ export default function HRDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-pending-leaves">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-pending-leaves"
+            onClick={() => navigate('/leaves?status=pending')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Pending Leaves</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -75,7 +89,11 @@ export default function HRDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-present-today">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-present-today"
+            onClick={() => navigate('/attendance')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Present Today</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
