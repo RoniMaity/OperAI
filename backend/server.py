@@ -799,6 +799,184 @@ async def ai_chat(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI service error: {str(e)}")
 
 
+@api_router.post("/ai/execute")
+async def ai_execute(
+    ai_request: AIRequest,
+    current_user: TokenData = Depends(get_current_user)
+):
+    try:
+        from services.ai_actions import AIActionExecutor, get_action_definitions
+        import json
+        
+        # Get available actions for user's role
+        all_actions = get_action_definitions()
+        allowed_actions = [
+            a for a in all_actions 
+            if current_user.role in a["permissions"]
+        ]
+        
+        # Build system prompt
+        actions_list = "\n".join([
+            f"- {a['name']}: {a['description']}\n  Parameters: {json.dumps(a['parameters'], indent=4)}"
+            for a in allowed_actions
+        ])
+        
+        system_prompt = f"""You are OperAI Intelligence, the operational AI engine for the OperAI workforce management platform.
+
+You are an AI that can TAKE ACTIONS in the system, not just provide information.
+
+Current user: {current_user.email}
+User role: {current_user.role}
+
+AVAILABLE ACTIONS FOR THIS ROLE:
+{actions_list}
+
+INSTRUCTIONS:
+1. Analyze the user's request
+2. Determine which action(s) to execute
+3. Extract parameters from the natural language input
+4. Return a JSON response with this EXACT structure:
+{{
+  "explanation": "Brief explanation of what you understood and will do",
+  "actions": [
+    {{
+      "action": "action_name",
+      "params": {{"param1": "value1", "param2": "value2"}}
+    }}
+  ]
+}}
+
+RULES:
+- ALWAYS respond with valid JSON
+- Use action names exactly as listed above
+- Extract dates in YYYY-MM-DD format
+- For task IDs, leave IDs, user IDs - ask the user if not provided
+- If the request is ambiguous, ask for clarification in the explanation
+- If the user lacks permissions, explain this in the explanation and set actions to []
+
+EXAMPLES:
+
+User: "Create a task for me to review the Q1 report by next Friday"
+Response:
+{{
+  "explanation": "I'll create a high-priority task for you to review the Q1 report with a deadline of next Friday.",
+  "actions": [
+    {{
+      "action": "create_task",
+      "params": {{
+        "title": "Review Q1 report",
+        "description": "Complete review of Q1 report",
+        "priority": "high",
+        "deadline": "2025-01-17"
+      }}
+    }}
+  ]
+}}
+
+User: "Apply for leave next Monday and Tuesday for personal work"
+Response:
+{{
+  "explanation": "I'll apply for casual leave for you from Monday Jan 13 to Tuesday Jan 14 for personal work.",
+  "actions": [
+    {{
+      "action": "apply_leave",
+      "params": {{
+        "leave_type": "casual",
+        "start_date": "2025-01-13",
+        "end_date": "2025-01-14",
+        "reason": "Personal work"
+      }}
+    }}
+  ]
+}}
+
+User: "Mark my attendance as WFH for today"
+Response:
+{{
+  "explanation": "I'll mark your attendance as Work From Home for today.",
+  "actions": [
+    {{
+      "action": "mark_attendance",
+      "params": {{
+        "work_mode": "wfh"
+      }}
+    }}
+  ]
+}}
+
+Now process the user's request."""
+
+        # Initialize AI
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=ai_request.session_id,
+            system_message=system_prompt
+        )
+        
+        chat.with_model("gemini", "gemini-2.5-flash")
+        
+        # Get AI response
+        user_message = UserMessage(text=ai_request.message)
+        ai_response = await chat.send_message(user_message)
+        
+        # Parse AI response
+        try:
+            # Clean response - remove markdown code blocks if present
+            cleaned_response = ai_response.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.startswith("```"):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            cleaned_response = cleaned_response.strip()
+            
+            parsed = json.loads(cleaned_response)
+            explanation = parsed.get("explanation", "Processing your request...")
+            actions_to_execute = parsed.get("actions", [])
+        except json.JSONDecodeError:
+            # If AI didn't return JSON, treat as explanation only
+            explanation = ai_response
+            actions_to_execute = []
+        
+        # Execute actions
+        executor = AIActionExecutor(db, current_user.user_id, current_user.role)
+        executed_actions = []
+        
+        for action_spec in actions_to_execute:
+            action_name = action_spec.get("action")
+            params = action_spec.get("params", {})
+            
+            result = await executor.execute_action(action_name, params)
+            executed_actions.append(result)
+        
+        # Save to database
+        ai_message = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user.user_id,
+            "session_id": ai_request.session_id,
+            "message": ai_request.message,
+            "response": explanation,
+            "action_type": "execute",
+            "actions_executed": executed_actions,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.ai_messages.insert_one(ai_message)
+        
+        return {
+            "explanation": explanation,
+            "actions": executed_actions,
+            "session_id": ai_request.session_id
+        }
+    
+    except Exception as e:
+        logger.error(f"AI execute error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI execution error: {str(e)}")
+
+
 @api_router.get("/ai/history")
 async def get_ai_history(
     session_id: Optional[str] = None,
