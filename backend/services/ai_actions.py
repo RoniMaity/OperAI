@@ -430,9 +430,12 @@ class AIActionExecutor:
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         work_mode = params.get("work_mode")
         
+        if not work_mode:
+            return {"success": False, "action": "update_work_mode", "error": "work_mode required (wfo/wfh/hybrid)"}
+        
         attendance = await self.db.attendance.find_one({"user_id": self.user_id, "date": today})
         if not attendance:
-            return {"success": False, "error": "No attendance record for today"}
+            return {"success": False, "action": "update_work_mode", "error": "No attendance record for today. Mark attendance first"}
         
         await self.db.attendance.update_one(
             {"user_id": self.user_id, "date": today},
