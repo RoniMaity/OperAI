@@ -16,6 +16,7 @@ import EmployeeListPage from './pages/EmployeeListPage';
 import LeaveListPage from './pages/LeaveListPage';
 import AttendanceListPage from './pages/AttendanceListPage';
 import DeadlineRequestsPage from './pages/DeadlineRequestsPage';
+import NotificationsPage from './pages/NotificationsPage';
 import '@/App.css';
 
 function ProtectedRoute({ children }) {
