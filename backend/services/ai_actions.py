@@ -1,44 +1,53 @@
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Optional, Callable
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
 
 class AIActionExecutor:
-    def __init__(self, db, user_id: str, user_role: str):
+    def __init__(self, db, user_id: str, user_role: str, user_email: str = None):
         self.db = db
         self.user_id = user_id
         self.user_role = user_role
+        self.user_email = user_email
+        self.action_registry = self._build_action_registry()
+    
+    def _build_action_registry(self) -> Dict[str, Callable]:
+        """Build registry of all available actions"""
+        return {
+            "create_task": self._create_task,
+            "update_task_status": self._update_task_status,
+            "reassign_task": self._reassign_task,
+            "list_user_tasks": self._list_user_tasks,
+            "apply_leave": self._apply_leave,
+            "cancel_leave": self._cancel_leave,
+            "approve_leave": self._approve_leave,
+            "reject_leave": self._reject_leave,
+            "list_pending_leaves": self._list_pending_leaves,
+            "mark_attendance": self._mark_attendance,
+            "update_work_mode": self._update_work_mode,
+            "create_announcement": self._create_announcement,
+            "list_team_tasks": self._list_team_tasks,
+            "generate_team_summary": self._generate_team_summary,
+            "generate_employee_report": self._generate_employee_report,
+            "generate_intern_evaluation": self._generate_intern_evaluation,
+        }
     
     async def execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an AI action with RBAC checks"""
         try:
-            if action == "create_task":
-                return await self._create_task(params)
-            elif action == "update_task_status":
-                return await self._update_task_status(params)
-            elif action == "reassign_task":
-                return await self._reassign_task(params)
-            elif action == "apply_leave":
-                return await self._apply_leave(params)
-            elif action == "approve_leave":
-                return await self._approve_leave(params)
-            elif action == "reject_leave":
-                return await self._reject_leave(params)
-            elif action == "mark_attendance":
-                return await self._mark_attendance(params)
-            elif action == "update_work_mode":
-                return await self._update_work_mode(params)
-            elif action == "create_announcement":
-                return await self._create_announcement(params)
-            elif action == "generate_report":
-                return await self._generate_report(params)
-            else:
-                return {"success": False, "error": f"Unknown action: {action}"}
+            action_func = self.action_registry.get(action)
+            if not action_func:
+                return {"success": False, "error": f"Unknown action: {action}", "action": action}
+            
+            return await action_func(params)
         except Exception as e:
-            logger.error(f"Action execution error: {str(e)}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Action execution error for {action}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e), "action": action}
     
     async def _create_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new task"""
