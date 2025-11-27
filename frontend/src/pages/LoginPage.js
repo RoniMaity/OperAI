@@ -55,6 +55,12 @@ export default function LoginPage() {
     }
   };
 
+  const handleQuickFill = (account) => {
+    setEmail(account.email);
+    setPassword(account.password);
+    toast.info(`Demo account filled: ${account.role}`);
+  };
+
   return (
     <div className="min-h-screen grid-pattern flex items-center justify-center p-4 bg-background transition-colors duration-300" data-testid="login-page">
       <Card className="w-full max-w-md shadow-2xl border-border bg-card">
