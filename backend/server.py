@@ -1395,6 +1395,48 @@ Output:
   ]
 }}
 
+Input: "attendance of emp1@operai.demo"
+Output:
+{{
+  "thought": "User wants attendance summary for a specific employee by email",
+  "actions": [
+    {{
+      "name": "get_attendance_summary",
+      "params": {{
+        "user_email": "emp1@operai.demo"
+      }}
+    }}
+  ]
+}}
+
+Input: "show attendance of Ronnie"
+Output:
+{{
+  "thought": "User wants attendance for Ronnie. Need to identify user by email if known, otherwise ask.",
+  "actions": [
+    {{
+      "name": "get_attendance_summary",
+      "params": {{
+        "user_email": "ronnie@operai.demo"
+      }}
+    }}
+  ]
+}}
+
+Input: "intern ka attendance dikhado"
+Output:
+{{
+  "thought": "User wants attendance for intern. Need specific email to proceed.",
+  "actions": [
+    {{
+      "name": "get_attendance_summary",
+      "params": {{
+        "user_email": "intern@operai.demo"
+      }}
+    }}
+  ]
+}}
+
 Input: "kal ka leave laga do"
 Output:
 {{
