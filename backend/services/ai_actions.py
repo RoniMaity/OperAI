@@ -657,50 +657,68 @@ def get_action_definitions() -> List[Dict[str, Any]]:
     return [
         {
             "name": "create_task",
-            "description": "Create a new task",
+            "description": "Create a new task and assign it to a user",
             "parameters": {
                 "title": "Task title (required)",
                 "description": "Task description (optional)",
-                "assigned_to": "User ID to assign task to (optional, defaults to self)",
-                "priority": "Priority: low, medium, high, urgent (optional, default: medium)",
-                "deadline": "Deadline in ISO format YYYY-MM-DD (optional)"
+                "assigned_to": "User ID to assign (optional, defaults to self)",
+                "priority": "low/medium/high/urgent (optional, default: medium)",
+                "deadline": "Deadline YYYY-MM-DD (optional)"
             },
             "permissions": ["admin", "hr", "team_lead"]
         },
         {
             "name": "update_task_status",
-            "description": "Update task status",
+            "description": "Update status or progress of a task",
             "parameters": {
                 "task_id": "Task ID (required)",
-                "status": "New status: todo, in_progress, completed, blocked (required)"
+                "status": "todo/in_progress/completed/blocked (optional)",
+                "progress": "Progress 0-100 (optional)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "reassign_task",
-            "description": "Reassign task to another user",
+            "description": "Reassign a task to another user",
             "parameters": {
                 "task_id": "Task ID (required)",
-                "new_assignee": "New assignee user ID (required)"
+                "new_assignee_email": "New assignee email (required)"
             },
             "permissions": ["admin", "hr", "team_lead"]
+        },
+        {
+            "name": "list_user_tasks",
+            "description": "List tasks for user",
+            "parameters": {
+                "user_id": "User ID (optional, defaults to self)",
+                "status": "Filter by status (optional)"
+            },
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "apply_leave",
             "description": "Apply for leave",
             "parameters": {
-                "leave_type": "Leave type: sick, casual, earned, unpaid (required)",
+                "leave_type": "sick/casual/earned/unpaid (optional, default: casual)",
                 "start_date": "Start date YYYY-MM-DD (required)",
                 "end_date": "End date YYYY-MM-DD (required)",
-                "reason": "Reason for leave (required)"
+                "reason": "Reason for leave (optional)"
+            },
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+        },
+        {
+            "name": "cancel_leave",
+            "description": "Cancel own pending leave request",
+            "parameters": {
+                "leave_id": "Leave ID (required)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "approve_leave",
-            "description": "Approve a leave request",
+            "description": "Approve a pending leave request",
             "parameters": {
-                "leave_id": "Leave request ID (required)"
+                "leave_id": "Leave ID (required)"
             },
             "permissions": ["admin", "hr", "team_lead"]
         },
@@ -708,43 +726,69 @@ def get_action_definitions() -> List[Dict[str, Any]]:
             "name": "reject_leave",
             "description": "Reject a leave request",
             "parameters": {
-                "leave_id": "Leave request ID (required)",
-                "reason": "Reason for rejection (required)"
+                "leave_id": "Leave ID (required)",
+                "reason": "Rejection reason (optional)"
             },
+            "permissions": ["admin", "hr", "team_lead"]
+        },
+        {
+            "name": "list_pending_leaves",
+            "description": "List all pending leave requests",
+            "parameters": {},
             "permissions": ["admin", "hr", "team_lead"]
         },
         {
             "name": "mark_attendance",
             "description": "Mark attendance for today",
             "parameters": {
-                "work_mode": "Work mode: wfo, wfh, hybrid (required)"
+                "work_mode": "wfo/wfh/hybrid (required)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "update_work_mode",
-            "description": "Update work mode for today's attendance",
+            "description": "Update work mode for today",
             "parameters": {
-                "work_mode": "New work mode: wfo, wfh, hybrid (required)"
+                "work_mode": "wfo/wfh/hybrid (required)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "create_announcement",
-            "description": "Create a company announcement",
+            "description": "Create company announcement",
             "parameters": {
                 "title": "Announcement title (required)",
                 "content": "Announcement content (required)",
-                "target_roles": "Target roles array (optional, empty means all)"
+                "target_roles": "Target roles array (optional)"
             },
             "permissions": ["admin", "hr"]
         },
         {
-            "name": "generate_report",
-            "description": "Generate various reports",
+            "name": "list_team_tasks",
+            "description": "List all tasks for the team",
+            "parameters": {},
+            "permissions": ["admin", "hr", "team_lead"]
+        },
+        {
+            "name": "generate_team_summary",
+            "description": "Generate team performance summary",
+            "parameters": {},
+            "permissions": ["admin", "hr", "team_lead"]
+        },
+        {
+            "name": "generate_employee_report",
+            "description": "Generate detailed employee report",
             "parameters": {
-                "report_type": "Report type: tasks, attendance, summary (required)"
+                "employee_email": "Employee email (required)"
             },
-            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+            "permissions": ["admin", "hr"]
+        },
+        {
+            "name": "generate_intern_evaluation",
+            "description": "Generate intern performance evaluation",
+            "parameters": {
+                "intern_email": "Intern email (required)"
+            },
+            "permissions": ["admin", "hr"]
         }
     ]
