@@ -41,8 +41,9 @@ export default function AIAssistantPage() {
       
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response.data.message || response.data.explanation,
-        actions: response.data.actionsExecuted || response.data.actions || []
+        content: response.data.response || response.data.message || response.data.explanation || 'AI response received',
+        actions: response.data.actions_executed || response.data.actionsExecuted || response.data.actions || [],
+        thought: response.data.thought
       }]);
     } catch (error) {
       console.error('AI error:', error);
