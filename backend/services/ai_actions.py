@@ -956,12 +956,65 @@ class AIActionExecutor:
             }
 
     async def _get_attendance_summary(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Get today's attendance and last 7-day summary for the current user"""
+        """Get today's attendance and last 7-day summary for current user or specified user with hierarchy checks"""
         try:
+            # Resolve target user
+            target_user_id = params.get("user_id")
+            target_user_email = params.get("user_email")
+            
+            # If email provided, look up user_id
+            if target_user_email and not target_user_id:
+                target_user = await self.db.users.find_one({"email": target_user_email})
+                if target_user:
+                    target_user_id = target_user["id"]
+                else:
+                    return {
+                        "success": False,
+                        "action": "get_attendance_summary",
+                        "error": f"User not found with email: {target_user_email}"
+                    }
+            
+            # If no target specified, use current user
+            if not target_user_id:
+                target_user_id = self.user_id
+            
+            # Permission checks (hierarchy: admin > hr > team_lead > employee > intern)
+            if target_user_id != self.user_id:
+                # Someone is trying to view another user's attendance
+                if self.user_role in ["admin", "hr"]:
+                    # Admin/HR can view anyone
+                    pass
+                elif self.user_role == "team_lead":
+                    # Team lead can only view subordinates
+                    subordinate_ids = await self._get_subordinate_user_ids()
+                    if target_user_id not in subordinate_ids:
+                        return {
+                            "success": False,
+                            "action": "get_attendance_summary",
+                            "error": "You don't have permission to view this user's attendance."
+                        }
+                else:
+                    # Employee/Intern cannot view others
+                    return {
+                        "success": False,
+                        "action": "get_attendance_summary",
+                        "error": "You can only view your own attendance."
+                    }
+            
+            # Get target user info
+            target_user = await self.db.users.find_one({"id": target_user_id})
+            if not target_user:
+                return {
+                    "success": False,
+                    "action": "get_attendance_summary",
+                    "error": "Target user not found"
+                }
+            
             today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
             
+            # Get today's attendance for target user
             today_attendance = await self.db.attendance.find_one({
-                "user_id": self.user_id,
+                "user_id": target_user_id,
                 "date": today
             })
             
@@ -983,9 +1036,10 @@ class AIActionExecutor:
                     "check_out": None
                 }
             
+            # Get last 7 days attendance for target user
             seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
             recent_attendance = await self.db.attendance.find({
-                "user_id": self.user_id,
+                "user_id": target_user_id,
                 "date": {"$gte": seven_days_ago, "$lte": today}
             }).to_list(100)
             
@@ -1005,6 +1059,12 @@ class AIActionExecutor:
                 "success": True,
                 "action": "get_attendance_summary",
                 "details": {
+                    "target_user": {
+                        "id": target_user["id"],
+                        "name": target_user.get("name", "Unknown"),
+                        "email": target_user.get("email", ""),
+                        "role": target_user.get("role", "employee")
+                    },
                     "today": today_data,
                     "last_7_days": last_7_days_data
                 }
