@@ -649,7 +649,20 @@ async def update_task(
     if task_update.notes is not None:
         update_data["notes"] = task_update.notes
     if task_update.deadline is not None:
-        update_data["deadline"] = task_update.deadline.isoformat()
+        old_deadline = task_doc.get("deadline")
+        new_deadline = task_update.deadline.isoformat()
+        update_data["deadline"] = new_deadline
+        
+        # Emit notification for deadline change
+        if old_deadline != new_deadline:
+            await create_notification(
+                user_id=task_doc["assigned_to"],
+                target_roles=[],
+                type="deadline_change",
+                title="Task deadline updated",
+                message=f"Deadline for '{task_doc['title']}' has been updated to {task_update.deadline.strftime('%Y-%m-%d')}",
+                related_task_id=task_id
+            )
     
     await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     
