@@ -101,3 +101,186 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Full end-to-end QA pass for OperAI across all roles (Admin, HR, Team Lead, Employee, Intern). Test auth/RBAC, core workflows (tasks, leaves, attendance, announcements, AI), and fix real bugs. Do NOT redesign, just stabilize."
+
+backend:
+  - task: "Auth - Register and Login"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test registration and login for all roles"
+
+  - task: "Auth - /api/auth/me endpoint"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to verify correct role and metadata returned"
+
+  - task: "RBAC - Route Protection"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Need to test cross-role access prevention"
+
+  - task: "Tasks - CRUD Operations"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test task creation, update, listing for all roles"
+
+  - task: "Deadline Requests - Create/Approve/Reject"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test deadline request flow for employees and approval by team leads"
+
+  - task: "Attendance - Check-in/Check-out"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test attendance marking and once-per-day enforcement"
+
+  - task: "Leave - Apply/Approve/Reject"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test leave application and approval flow"
+
+  - task: "Announcements - Create and Notifications"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test announcement creation and notification generation"
+
+  - task: "AI - /api/ai/chat endpoint"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test AI chat functionality"
+
+  - task: "AI - /api/ai/execute endpoint"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test AI action execution with Hindi-English prompts"
+
+  - task: "Notifications - Creation and Retrieval"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Test notification system for all notification types"
+
+frontend:
+  - task: "Auth UI - Login/Register"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/LoginPage.js, RegisterPage.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Will test after backend verification"
+
+  - task: "Dashboard - Role-specific views"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Will test after backend verification"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Auth - Register and Login"
+    - "Auth - /api/auth/me endpoint"
+    - "RBAC - Route Protection"
+    - "Tasks - CRUD Operations"
+    - "Attendance - Check-in/Check-out"
+    - "Leave - Apply/Approve/Reject"
+    - "AI - /api/ai/execute endpoint"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "sequential"
+
+agent_communication:
+  - agent: "main"
+    message: "Starting comprehensive QA pass. Backend testing first, then frontend. Will test all roles: Admin, HR, Team Lead, Employee, Intern. Focus on real bugs, not redesign."
