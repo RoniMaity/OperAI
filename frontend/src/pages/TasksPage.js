@@ -10,10 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Progress } from '../components/ui/progress';
 import { Slider } from '../components/ui/slider';
+import DeadlineEditDialog from '../components/DeadlineEditDialog';
+import DeadlineRequestDialog from '../components/DeadlineRequestDialog';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { Plus, Edit, Loader2 } from 'lucide-react';
+import { Plus, Edit, Loader2, Calendar } from 'lucide-react';
 
 export default function TasksPage() {
   const { user } = useAuth();
