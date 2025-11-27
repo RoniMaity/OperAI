@@ -33,6 +33,8 @@ class AIActionExecutor:
             "generate_team_summary": self._generate_team_summary,
             "generate_employee_report": self._generate_employee_report,
             "generate_intern_evaluation": self._generate_intern_evaluation,
+            "summarize_tasks": self._summarize_tasks,
+            "summarize_notifications": self._summarize_notifications,
         }
     
     async def execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
