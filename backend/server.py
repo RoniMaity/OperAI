@@ -7,12 +7,14 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
 import jwt
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import json
+import re
 
 
 ROOT_DIR = Path(__file__).parent
@@ -250,7 +252,8 @@ class AIMessage(BaseModel):
     session_id: str
     message: str
     response: str
-    action_type: Optional[str] = None  # rewrite, explain, breakdown, report
+    action_type: Optional[str] = None  # chat or execute
+    actions_executed: Optional[List[Dict[str, Any]]] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -258,6 +261,36 @@ class AIRequest(BaseModel):
     message: str
     session_id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()))
     action_type: Optional[str] = None
+
+
+class DeadlineRequestStatus:
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class DeadlineRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    task_id: str
+    requested_by: str  # user_id
+    requested_new_deadline: str  # YYYY-MM-DD
+    reason: str
+    status: str = DeadlineRequestStatus.PENDING
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    responded_by: Optional[str] = None
+    response_note: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class DeadlineRequestCreate(BaseModel):
+    requested_new_deadline: str
+    reason: str
+
+
+class DeadlineRequestUpdate(BaseModel):
+    status: str  # approved or rejected
+    response_note: Optional[str] = None
 
 
 # ===== HELPER FUNCTIONS =====
@@ -308,6 +341,32 @@ def require_role(*allowed_roles: str):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return current_user
     return role_checker
+
+
+def extract_json_from_response(text: str) -> dict:
+    """Extract JSON from AI response, handling markdown fences and extra text"""
+    text = text.strip()
+    
+    # Try to find JSON between code fences
+    if '```' in text:
+        # Extract content between first and last ```
+        pattern = r'```(?:json)?\s*({.*?})\s*```'
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            text = match.group(1)
+    
+    # Find first { and last }
+    start = text.find('{')
+    end = text.rfind('}')
+    
+    if start != -1 and end != -1 and end > start:
+        text = text[start:end+1]
+    
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON: {text[:200]}...")
+        raise ValueError(f"Could not parse AI response as JSON: {str(e)}")
 
 
 # ===== AUTH ENDPOINTS =====
@@ -549,7 +608,13 @@ async def update_task(
     if not task_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
-    # Check permissions
+    # Check permissions for deadline updates
+    if task_update.deadline is not None:
+        # Only admin, hr, team_lead can update deadline
+        if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can update deadlines directly")
+    
+    # Check general permissions
     if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
         if task_doc["assigned_to"] != current_user.user_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only update your own tasks")
@@ -583,6 +648,129 @@ async def update_task(
         updated_task['deadline'] = datetime.fromisoformat(updated_task['deadline'])
     
     return Task(**updated_task)
+
+
+# ===== DEADLINE REQUESTS =====
+@api_router.post("/tasks/{task_id}/deadline-requests", response_model=DeadlineRequest)
+async def create_deadline_request(
+    task_id: str,
+    request_data: DeadlineRequestCreate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    # Verify task exists
+    task_doc = await db.tasks.find_one({"id": task_id})
+    if not task_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    
+    # Check if user is assigned to this task
+    if task_doc["assigned_to"] != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only request deadline extension for your own tasks")
+    
+    # Check if there's already a pending request for this task
+    existing = await db.deadline_requests.find_one({
+        "task_id": task_id,
+        "requested_by": current_user.user_id,
+        "status": DeadlineRequestStatus.PENDING
+    })
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already have a pending deadline request for this task")
+    
+    deadline_request = DeadlineRequest(
+        task_id=task_id,
+        requested_by=current_user.user_id,
+        requested_new_deadline=request_data.requested_new_deadline,
+        reason=request_data.reason
+    )
+    
+    doc = deadline_request.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.deadline_requests.insert_one(doc)
+    return deadline_request
+
+
+@api_router.get("/deadline-requests", response_model=List[DeadlineRequest])
+async def get_deadline_requests(
+    status: Optional[str] = None,
+    current_user: TokenData = Depends(get_current_user)
+):
+    query = {}
+    
+    # Access control
+    if current_user.role in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
+        # Managers can see all requests (optionally filter by status)
+        if status:
+            query["status"] = status
+    else:
+        # Employees/interns see only their own requests
+        query["requested_by"] = current_user.user_id
+        if status:
+            query["status"] = status
+    
+    requests = await db.deadline_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    for req in requests:
+        if isinstance(req.get('created_at'), str):
+            req['created_at'] = datetime.fromisoformat(req['created_at'])
+        if req.get('updated_at') and isinstance(req['updated_at'], str):
+            req['updated_at'] = datetime.fromisoformat(req['updated_at'])
+    
+    return requests
+
+
+@api_router.patch("/deadline-requests/{request_id}", response_model=DeadlineRequest)
+async def update_deadline_request(
+    request_id: str,
+    update_data: DeadlineRequestUpdate,
+    current_user: TokenData = Depends(require_role(UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD))
+):
+    # Find the request
+    request_doc = await db.deadline_requests.find_one({"id": request_id})
+    if not request_doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deadline request not found")
+    
+    # Check if already processed
+    if request_doc["status"] != DeadlineRequestStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This request has already been processed")
+    
+    # Update request status
+    update_fields = {
+        "status": update_data.status,
+        "responded_by": current_user.user_id,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if update_data.response_note:
+        update_fields["response_note"] = update_data.response_note
+    
+    # If approved, update the task's deadline
+    if update_data.status == DeadlineRequestStatus.APPROVED:
+        task_id = request_doc["task_id"]
+        new_deadline = request_doc["requested_new_deadline"]
+        
+        # Update task deadline
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {
+                "deadline": new_deadline,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    
+    # Update the request
+    await db.deadline_requests.update_one(
+        {"id": request_id},
+        {"$set": update_fields}
+    )
+    
+    updated_request = await db.deadline_requests.find_one({"id": request_id}, {"_id": 0})
+    
+    if isinstance(updated_request.get('created_at'), str):
+        updated_request['created_at'] = datetime.fromisoformat(updated_request['created_at'])
+    if updated_request.get('updated_at') and isinstance(updated_request['updated_at'], str):
+        updated_request['updated_at'] = datetime.fromisoformat(updated_request['updated_at'])
+    
+    return DeadlineRequest(**updated_request)
 
 
 # ===== ATTENDANCE =====
@@ -751,7 +939,6 @@ async def update_leave_status(
     leave_update: LeaveUpdate,
     current_user: TokenData = Depends(require_role(UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD))
 ):
-    # FIXED: Changed db.leave to db.leaves
     leave_doc = await db.leaves.find_one({"id": leave_id})
     if not leave_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found")
@@ -817,6 +1004,66 @@ async def get_announcements(current_user: TokenData = Depends(get_current_user))
 
 
 # ===== AI ASSISTANT =====
+async def build_user_context(user_id: str, role: str) -> str:
+    """Build context snapshot from database for AI"""
+    context_parts = []
+    
+    # Fetch recent tasks
+    if role in [UserRole.EMPLOYEE, UserRole.INTERN]:
+        tasks = await db.tasks.find(
+            {"assigned_to": user_id},
+            {"_id": 0, "id": 1, "title": 1, "status": 1, "deadline": 1, "priority": 1}
+        ).sort("created_at", -1).limit(10).to_list(10)
+        
+        if tasks:
+            task_summary = "Your current tasks (up to 10):\n"
+            for t in tasks:
+                deadline_str = t.get('deadline', 'No deadline')
+                task_summary += f"  - [{t['status']}] {t['title']} (Priority: {t.get('priority', 'medium')}, Deadline: {deadline_str})\n"
+            context_parts.append(task_summary)
+    
+    elif role == UserRole.TEAM_LEAD:
+        tasks = await db.tasks.find(
+            {"created_by": user_id},
+            {"_id": 0, "id": 1, "title": 1, "status": 1, "assigned_to": 1}
+        ).sort("created_at", -1).limit(10).to_list(10)
+        
+        if tasks:
+            task_summary = f"Team tasks you created (up to 10): {len(tasks)} tasks\n"
+            context_parts.append(task_summary)
+    
+    # Fetch recent leaves
+    leaves = await db.leaves.find(
+        {"user_id": user_id},
+        {"_id": 0, "status": 1, "leave_type": 1, "start_date": 1, "end_date": 1}
+    ).sort("created_at", -1).limit(5).to_list(5)
+    
+    if leaves:
+        leave_summary = "Your recent leave requests (up to 5):\n"
+        for l in leaves:
+            leave_summary += f"  - {l['leave_type']} ({l['start_date']} to {l['end_date']}): {l['status']}\n"
+        context_parts.append(leave_summary)
+    
+    # Today's attendance
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    attendance = await db.attendance.find_one(
+        {"user_id": user_id, "date": today},
+        {"_id": 0, "status": 1, "work_mode": 1, "check_in": 1, "check_out": 1}
+    )
+    
+    if attendance:
+        att_summary = f"Today's attendance: {attendance['status']} ({attendance['work_mode']})"
+        if attendance.get('check_in'):
+            att_summary += f" - Checked in: {attendance['check_in']}"
+        if attendance.get('check_out'):
+            att_summary += f", Checked out: {attendance['check_out']}"
+        context_parts.append(att_summary)
+    
+    if context_parts:
+        return "\n\nCONTEXT SNAPSHOT FOR THIS USER:\n" + "\n".join(context_parts)
+    return ""
+
+
 @api_router.post("/ai/chat")
 async def ai_chat(
     ai_request: AIRequest,
@@ -832,11 +1079,31 @@ async def ai_chat(
                 "error": "EMERGENT_LLM_KEY not configured"
             }
         
-        # Initialize AI chat
+        # Build context from database
+        user_context = await build_user_context(current_user.user_id, current_user.role)
+        
+        # Initialize AI chat with friendly system message
+        system_message = f"""You are OperAI Intelligence, a helpful AI assistant for workforce management.
+
+You help with:
+- Tasks (viewing, understanding status, progress)
+- Leave requests (understanding policies, dates)
+- Attendance (checking status)
+- Work questions and general help
+
+IMPORTANT INSTRUCTIONS:
+- Use short, simple, clear sentences
+- Be friendly and conversational
+- Understand informal language, casual phrasing, and mixed Hindi-English
+- Don't force users to be technical
+- If user says things like "kal ka leave", "deadline badha do", "WFH mark karo" - understand the intent
+- Provide helpful, actionable responses{user_context}
+"""
+        
         chat = LlmChat(
             api_key=llm_key,
             session_id=ai_request.session_id,
-            system_message="You are a helpful AI assistant for WorkforceOS. Help users with task explanations, report generation, announcement rewriting, and general workforce management queries. Be concise and professional."
+            system_message=system_message
         )
         
         # Use Gemini 2.5 Flash
@@ -852,7 +1119,7 @@ async def ai_chat(
             session_id=ai_request.session_id,
             message=ai_request.message,
             response=response,
-            action_type=ai_request.action_type
+            action_type="chat"
         )
         
         doc = ai_message.model_dump()
@@ -879,12 +1146,23 @@ async def ai_execute(
 ):
     try:
         from services.ai_actions import AIActionExecutor, get_action_definitions
-        import json
-        from datetime import datetime, timedelta
+        
+        # Check if EMERGENT_LLM_KEY is available
+        llm_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not llm_key:
+            return {
+                "message": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
+                "thought": "AI service unavailable",
+                "actionsExecuted": [],
+                "session_id": ai_request.session_id
+            }
         
         # Get current user details
         user_doc = await db.users.find_one({"id": current_user.user_id})
         user_email = user_doc.get("email") if user_doc else current_user.email
+        
+        # Build context from database
+        user_context = await build_user_context(current_user.user_id, current_user.role)
         
         # Get available actions for user's role
         all_actions = get_action_definitions()
@@ -917,19 +1195,30 @@ Role: {current_user.role}
 Today: {today.strftime('%Y-%m-%d')} ({today.strftime('%A')})
 Tomorrow: {tomorrow.strftime('%Y-%m-%d')}
 Next Monday: {next_monday.strftime('%Y-%m-%d')}
-Next Friday: {next_friday.strftime('%Y-%m-%d')}
+Next Friday: {next_friday.strftime('%Y-%m-%d')}{user_context}
 
 AVAILABLE ACTIONS:
 {actions_list}
 
-IMPORTANT GUIDELINES:
-- When user mentions an email address for task assignment, use the "assigned_to_email" parameter.
-- When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter.
-- For date-based queries, use the dates provided in CURRENT CONTEXT.
+IMPORTANT LANGUAGE UNDERSTANDING:
+- User may use INFORMAL, CASUAL language
+- Understand mixed Hindi-English (e.g., "kal ka leave laga do", "mera deadline aage badha do", "aaj WFH mark kar do")
+- Map casual requests to the appropriate actions
+- Be flexible and interpret intent, not just literal words
 
-OUTPUT FORMAT (MUST BE VALID JSON):
+GUIDELINES:
+- When user mentions an email address for task assignment, use the "assigned_to_email" parameter
+- When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter
+- For date-based queries, use the dates provided in CURRENT CONTEXT
+- Interpret "kal" as tomorrow, "aaj" as today
+- "leave laga do" means apply_leave
+- "deadline badha do" means they want to request deadline extension (but employees can't change directly, they need to request)
+- "WFH mark kar do" / "attendance mark karo" means mark_attendance
+
+OUTPUT FORMAT - CRITICAL:
+Return ONLY a JSON object with these keys:
 {{
-  "thought": "What I understood from the user's request",
+  "thought": "Brief explanation of what you understood in simple English",
   "actions": [
     {{
       "name": "action_name",
@@ -937,26 +1226,12 @@ OUTPUT FORMAT (MUST BE VALID JSON):
         "param1": "value1"
       }}
     }}
-  ],
-  "response": "Natural language response to user"
+  ]
 }}
 
-IMPORTANT:
-- Always return valid JSON
-- actions array can have multiple actions
-- If no action needed, use empty actions array: []
-- Be specific and helpful in your response
+DO NOT include markdown code fences (```), extra prose, or anything outside the JSON object.
+If you can't perform an action, return empty actions array [] and explain why in 'thought'.
 """
-        
-        # Check if EMERGENT_LLM_KEY is available
-        llm_key = os.environ.get('EMERGENT_LLM_KEY')
-        if not llm_key:
-            return {
-                "response": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
-                "thought": "AI service unavailable",
-                "actions_executed": [],
-                "session_id": ai_request.session_id
-            }
         
         # Call AI to determine actions
         chat = LlmChat(
@@ -969,24 +1244,15 @@ IMPORTANT:
         user_message = UserMessage(text=ai_request.message)
         ai_response = await chat.send_message(user_message)
         
-        # Parse AI response
+        # Parse AI response with robust error handling
         try:
-            # Try to extract JSON from markdown code blocks if present
-            if "```json" in ai_response:
-                json_start = ai_response.find("```json") + 7
-                json_end = ai_response.find("```", json_start)
-                ai_response = ai_response[json_start:json_end].strip()
-            elif "```" in ai_response:
-                json_start = ai_response.find("```") + 3
-                json_end = ai_response.find("```", json_start)
-                ai_response = ai_response[json_start:json_end].strip()
-            
-            parsed = json.loads(ai_response)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response as JSON: {ai_response}")
+            parsed = extract_json_from_response(ai_response)
+        except Exception as parse_error:
+            logger.error(f"Failed to parse AI response: {ai_response[:300]}")
             return {
-                "response": ai_response,
-                "actions_executed": [],
+                "message": "I understood your request but had trouble processing it. Could you try rephrasing in simpler terms?",
+                "thought": "Failed to parse my own output format",
+                "actionsExecuted": [],
                 "session_id": ai_request.session_id
             }
         
@@ -1005,8 +1271,9 @@ IMPORTANT:
             user_id=current_user.user_id,
             session_id=ai_request.session_id,
             message=ai_request.message,
-            response=parsed.get("response", ""),
-            action_type="execute"
+            response=parsed.get("thought", ""),
+            action_type="execute",
+            actions_executed=results
         )
         
         doc = ai_message.model_dump()
@@ -1014,9 +1281,9 @@ IMPORTANT:
         await db.ai_messages.insert_one(doc)
         
         return {
-            "response": parsed.get("response", ""),
+            "message": parsed.get("thought", ""),
             "thought": parsed.get("thought", ""),
-            "actions_executed": results,
+            "actionsExecuted": results,
             "session_id": ai_request.session_id
         }
     
@@ -1025,9 +1292,9 @@ IMPORTANT:
         import traceback
         traceback.print_exc()
         return {
-            "response": "I encountered an error processing your request. Please try again.",
+            "message": "I encountered an error processing your request. Please try again with a simpler instruction.",
             "thought": "Error occurred",
-            "actions_executed": [],
+            "actionsExecuted": [],
             "session_id": ai_request.session_id,
             "error": str(e)
         }
@@ -1042,13 +1309,42 @@ async def get_ai_history(
     if session_id:
         query["session_id"] = session_id
     
-    history = await db.ai_messages.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    history = await db.ai_messages.find(query, {"_id": 0}).sort("created_at", 1).limit(100).to_list(100)
     
     for msg in history:
         if isinstance(msg.get('created_at'), str):
             msg['created_at'] = datetime.fromisoformat(msg['created_at'])
     
     return history
+
+
+@api_router.get("/ai/sessions")
+async def get_ai_sessions(current_user: TokenData = Depends(get_current_user)):
+    """Get list of AI chat sessions with metadata"""
+    pipeline = [
+        {"$match": {"user_id": current_user.user_id}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$session_id",
+            "last_message_time": {"$first": "$created_at"},
+            "message_count": {"$sum": 1},
+            "last_message": {"$first": "$message"}
+        }},
+        {"$sort": {"last_message_time": -1}},
+        {"$limit": 20}
+    ]
+    
+    sessions = await db.ai_messages.aggregate(pipeline).to_list(20)
+    
+    return [
+        {
+            "session_id": s["_id"],
+            "last_message_time": s["last_message_time"],
+            "message_count": s["message_count"],
+            "last_message": s["last_message"][:50] + "..." if len(s["last_message"]) > 50 else s["last_message"]
+        }
+        for s in sessions
+    ]
 
 
 # ===== DASHBOARD STATS =====
