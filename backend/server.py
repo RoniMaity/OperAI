@@ -771,6 +771,10 @@ async def update_deadline_request(
     if update_data.response_note:
         update_fields["response_note"] = update_data.response_note
     
+    # Get task details for notification
+    task = await db.tasks.find_one({"id": request_doc["task_id"]})
+    task_title = task.get("title", "Unknown task") if task else "Unknown task"
+    
     # If approved, update the task's deadline
     if update_data.status == DeadlineRequestStatus.APPROVED:
         task_id = request_doc["task_id"]
@@ -783,6 +787,29 @@ async def update_deadline_request(
                 "deadline": new_deadline,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
+        )
+        
+        # Create notification for approval
+        await create_notification(
+            user_id=request_doc["requested_by"],
+            target_roles=[],
+            type="deadline_request_update",
+            title="Deadline request approved",
+            message=f"Your deadline extension request for '{task_title}' has been approved. New deadline: {new_deadline}",
+            related_request_id=request_id,
+            related_task_id=task_id
+        )
+    else:
+        # Create notification for rejection
+        rejection_note = update_data.response_note or "No reason provided"
+        await create_notification(
+            user_id=request_doc["requested_by"],
+            target_roles=[],
+            type="deadline_request_update",
+            title="Deadline request rejected",
+            message=f"Your deadline extension request for '{task_title}' has been rejected. Reason: {rejection_note}",
+            related_request_id=request_id,
+            related_task_id=request_doc["task_id"]
         )
     
     # Update the request
