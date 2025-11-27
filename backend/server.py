@@ -408,29 +408,34 @@ async def get_user(user_id: str, current_user: TokenData = Depends(get_current_u
     return User(**user_doc)
 
 
-# ===== DEPARTMENT MANAGEMENT =====
+# ===== DEPARTMENTS =====
 @api_router.post("/departments", response_model=Department)
 async def create_department(
     dept_data: DepartmentCreate,
     current_user: TokenData = Depends(require_role(UserRole.ADMIN, UserRole.HR))
 ):
-    dept = Department(name=dept_data.name, description=dept_data.description)
-    doc = dept.model_dump()
+    department = Department(
+        name=dept_data.name,
+        description=dept_data.description
+    )
+    
+    doc = department.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
+    
     await db.departments.insert_one(doc)
-    return dept
+    return department
 
 
 @api_router.get("/departments", response_model=List[Department])
 async def get_departments(current_user: TokenData = Depends(get_current_user)):
-    depts = await db.departments.find({}, {"_id": 0}).to_list(1000)
-    for dept in depts:
+    departments = await db.departments.find({}, {"_id": 0}).to_list(1000)
+    for dept in departments:
         if isinstance(dept.get('created_at'), str):
             dept['created_at'] = datetime.fromisoformat(dept['created_at'])
-    return depts
+    return departments
 
 
-# ===== TASK MANAGEMENT =====
+# ===== TASKS =====
 @api_router.post("/tasks", response_model=Task)
 async def create_task(
     task_data: TaskCreate,
@@ -456,14 +461,39 @@ async def create_task(
 
 
 @api_router.get("/tasks", response_model=List[Task])
-async def get_tasks(current_user: TokenData = Depends(get_current_user)):
-    # HR/Admin/Team Lead can see all tasks, others see only their tasks
-    if current_user.role in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
-        query = {}
-    else:
-        query = {"assigned_to": current_user.user_id}
+async def get_tasks(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    created_by: Optional[str] = None,
+    current_user: TokenData = Depends(get_current_user)
+):
+    query = {}
     
-    tasks = await db.tasks.find(query, {"_id": 0}).to_list(1000)
+    # Access control
+    if current_user.role in [UserRole.ADMIN, UserRole.HR]:
+        # Can see all tasks
+        if assigned_to:
+            query["assigned_to"] = assigned_to
+        if created_by:
+            query["created_by"] = created_by
+    elif current_user.role == UserRole.TEAM_LEAD:
+        # Can see tasks they created or tasks assigned to them
+        query["$or"] = [
+            {"created_by": current_user.user_id},
+            {"assigned_to": current_user.user_id}
+        ]
+    else:
+        # Can only see their own tasks
+        query["assigned_to"] = current_user.user_id
+    
+    # Filters
+    if status:
+        query["status"] = status
+    if priority:
+        query["priority"] = priority
+    
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
     for task in tasks:
         if isinstance(task.get('created_at'), str):
@@ -483,8 +513,9 @@ async def get_task(task_id: str, current_user: TokenData = Depends(get_current_u
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
     # Check access
-    if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD] and task_doc['assigned_to'] != current_user.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
+        if task_doc["assigned_to"] != current_user.user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     
     if isinstance(task_doc.get('created_at'), str):
         task_doc['created_at'] = datetime.fromisoformat(task_doc['created_at'])
@@ -506,18 +537,29 @@ async def update_task(
     if not task_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     
-    # Check access
-    if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD] and task_doc['assigned_to'] != current_user.user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    # Check permissions
+    if current_user.role not in [UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD]:
+        if task_doc["assigned_to"] != current_user.user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only update your own tasks")
     
-    # Update fields
-    update_data = {k: v for k, v in task_update.model_dump(exclude_unset=True).items() if v is not None}
-    if update_data:
-        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-        if 'deadline' in update_data and update_data['deadline']:
-            update_data['deadline'] = update_data['deadline'].isoformat()
-        
-        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if task_update.title is not None:
+        update_data["title"] = task_update.title
+    if task_update.description is not None:
+        update_data["description"] = task_update.description
+    if task_update.status is not None:
+        update_data["status"] = task_update.status
+    if task_update.priority is not None:
+        update_data["priority"] = task_update.priority
+    if task_update.progress is not None:
+        update_data["progress"] = min(100, max(0, task_update.progress))
+    if task_update.notes is not None:
+        update_data["notes"] = task_update.notes
+    if task_update.deadline is not None:
+        update_data["deadline"] = task_update.deadline.isoformat()
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     
@@ -531,15 +573,15 @@ async def update_task(
     return Task(**updated_task)
 
 
-# ===== ATTENDANCE MANAGEMENT =====
+# ===== ATTENDANCE =====
 @api_router.post("/attendance/check-in", response_model=Attendance)
 async def check_in(
-    check_in_data: AttendanceCheckIn,
+    attendance_data: AttendanceCheckIn,
     current_user: TokenData = Depends(get_current_user)
 ):
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     
-    # Check if already checked in
+    # Check if already checked in today
     existing = await db.attendance.find_one({"user_id": current_user.user_id, "date": today})
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already checked in today")
@@ -548,8 +590,8 @@ async def check_in(
         user_id=current_user.user_id,
         date=today,
         check_in=datetime.now(timezone.utc),
-        status=AttendanceStatus.PRESENT if check_in_data.work_mode == WorkMode.WFO else AttendanceStatus.WFH,
-        work_mode=check_in_data.work_mode
+        work_mode=attendance_data.work_mode,
+        status=AttendanceStatus.PRESENT if attendance_data.work_mode == WorkMode.WFO else AttendanceStatus.WFH
     )
     
     doc = attendance.model_dump()
@@ -563,12 +605,14 @@ async def check_in(
 
 @api_router.post("/attendance/check-out", response_model=Attendance)
 async def check_out(
-    check_out_data: AttendanceCheckOut,
+    checkout_data: AttendanceCheckOut,
     current_user: TokenData = Depends(get_current_user)
 ):
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     
+    # Find today's attendance record
     attendance_doc = await db.attendance.find_one({"user_id": current_user.user_id, "date": today})
+    
     if not attendance_doc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not checked in yet")
     
@@ -576,10 +620,11 @@ async def check_out(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already checked out")
     
     update_data = {
-        "check_out": datetime.now(timezone.utc).isoformat(),
+        "check_out": datetime.now(timezone.utc).isoformat()
     }
-    if check_out_data.notes:
-        update_data["notes"] = check_out_data.notes
+    
+    if checkout_data.notes:
+        update_data["notes"] = checkout_data.notes
     
     await db.attendance.update_one(
         {"user_id": current_user.user_id, "date": today},
@@ -694,7 +739,8 @@ async def update_leave_status(
     leave_update: LeaveUpdate,
     current_user: TokenData = Depends(require_role(UserRole.ADMIN, UserRole.HR, UserRole.TEAM_LEAD))
 ):
-    leave_doc = await db.leave.find_one({"id": leave_id})
+    # FIXED: Changed db.leave to db.leaves
+    leave_doc = await db.leaves.find_one({"id": leave_id})
     if not leave_doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found")
     
@@ -749,7 +795,7 @@ async def get_announcements(current_user: TokenData = Depends(get_current_user))
         ]
     }
     
-    announcements = await db.announcements.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    announcements = await db.announcements.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
     for announcement in announcements:
         if isinstance(announcement.get('created_at'), str):
@@ -849,6 +895,11 @@ Next Friday: {next_friday.strftime('%Y-%m-%d')}
 AVAILABLE ACTIONS:
 {actions_list}
 
+IMPORTANT GUIDELINES:
+- When user mentions an email address for task assignment, use the "assigned_to_email" parameter.
+- When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter.
+- For date-based queries, use the dates provided in CURRENT CONTEXT.
+
 OUTPUT FORMAT (MUST BE VALID JSON):
 {{
   "thought": "What I understood from the user's request",
@@ -859,95 +910,18 @@ OUTPUT FORMAT (MUST BE VALID JSON):
         "param1": "value1"
       }}
     }}
-  ]
+  ],
+  "response": "Natural language response to user"
 }}
 
-RULES:
-1. Always output valid JSON
-2. Use exact action names from the list above
-3. Extract all required parameters from user's natural language
-4. Convert relative dates ("tomorrow", "next Monday") to YYYY-MM-DD format
-5. If information is missing, include it in thought and set actions to []
-6. If user lacks permissions, explain in thought and set actions to []
-
-EXAMPLES:
-
-Input: "Create a task to review documentation by next Friday"
-Output:
-{{
-  "thought": "User wants to create a task with a deadline of next Friday",
-  "actions": [
-    {{
-      "name": "create_task",
-      "params": {{
-        "title": "Review documentation",
-        "priority": "medium",
-        "deadline": "{next_friday.strftime('%Y-%m-%d')}"
-      }}
-    }}
-  ]
-}}
-
-Input: "Apply for sick leave tomorrow"
-Output:
-{{
-  "thought": "User wants to apply for sick leave for tomorrow",
-  "actions": [
-    {{
-      "name": "apply_leave",
-      "params": {{
-        "leave_type": "sick",
-        "start_date": "{tomorrow.strftime('%Y-%m-%d')}",
-        "end_date": "{tomorrow.strftime('%Y-%m-%d')}",
-        "reason": "Sick leave"
-      }}
-    }}
-  ]
-}}
-
-Input: "Mark my attendance as work from home"
-Output:
-{{
-  "thought": "User wants to mark attendance as WFH for today",
-  "actions": [
-    {{
-      "name": "mark_attendance",
-      "params": {{
-        "work_mode": "wfh"
-      }}
-    }}
-  ]
-}}
-
-Input: "Show me my active tasks and mark the first one as completed"
-Output:
-{{
-  "thought": "User wants to list tasks first. I'll list them, but cannot auto-complete without task ID",
-  "actions": [
-    {{
-      "name": "list_user_tasks",
-      "params": {{
-        "status": "in_progress"
-      }}
-    }}
-  ]
-}}
-
-Input: "List all pending leaves and approve the first one" (as HR)
-Output:
-{{
-  "thought": "User wants to list pending leaves. I'll list them first",
-  "actions": [
-    {{
-      "name": "list_pending_leaves",
-      "params": {{}}
-    }}
-  ]
-}}
-
-Now process: {ai_request.message}"""
-
-        # Initialize AI
+IMPORTANT:
+- Always return valid JSON
+- actions array can have multiple actions
+- If no action needed, use empty actions array: []
+- Be specific and helpful in your response
+"""
+        
+        # Call AI to determine actions
         chat = LlmChat(
             api_key=os.environ['EMERGENT_LLM_KEY'],
             session_id=ai_request.session_id,
@@ -955,62 +929,57 @@ Now process: {ai_request.message}"""
         )
         
         chat.with_model("gemini", "gemini-2.5-flash")
-        
-        # Get AI response
         user_message = UserMessage(text=ai_request.message)
         ai_response = await chat.send_message(user_message)
         
         # Parse AI response
         try:
-            cleaned_response = ai_response.strip()
-            if cleaned_response.startswith("```json"):
-                cleaned_response = cleaned_response[7:]
-            if cleaned_response.startswith("```"):
-                cleaned_response = cleaned_response[3:]
-            if cleaned_response.endswith("```"):
-                cleaned_response = cleaned_response[:-3]
-            cleaned_response = cleaned_response.strip()
+            # Try to extract JSON from markdown code blocks if present
+            if "```json" in ai_response:
+                json_start = ai_response.find("```json") + 7
+                json_end = ai_response.find("```", json_start)
+                ai_response = ai_response[json_start:json_end].strip()
+            elif "```" in ai_response:
+                json_start = ai_response.find("```") + 3
+                json_end = ai_response.find("```", json_start)
+                ai_response = ai_response[json_start:json_end].strip()
             
-            parsed = json.loads(cleaned_response)
-            thought = parsed.get("thought", "Processing...")
-            actions_to_execute = parsed.get("actions", [])
+            parsed = json.loads(ai_response)
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {str(e)}, Response: {ai_response}")
-            thought = "I couldn't properly parse the request. Please try rephrasing."
-            actions_to_execute = []
+            logger.error(f"Failed to parse AI response as JSON: {ai_response}")
+            return {
+                "response": ai_response,
+                "actions_executed": [],
+                "session_id": ai_request.session_id
+            }
         
         # Execute actions
         executor = AIActionExecutor(db, current_user.user_id, current_user.role, user_email)
-        executed_actions = []
         
-        for action_spec in actions_to_execute:
-            action_name = action_spec.get("name")
-            params = action_spec.get("params", {})
-            
+        results = []
+        for action in parsed.get("actions", []):
+            action_name = action.get("name")
+            params = action.get("params", {})
             result = await executor.execute_action(action_name, params)
-            executed_actions.append({
-                "name": action_name,
-                "params": params,
-                "result": result
-            })
+            results.append(result)
         
         # Save to database
-        ai_message = {
-            "id": str(uuid.uuid4()),
-            "user_id": current_user.user_id,
-            "session_id": ai_request.session_id,
-            "message": ai_request.message,
-            "response": thought,
-            "action_type": "execute",
-            "actions_executed": executed_actions,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
+        ai_message = AIMessage(
+            user_id=current_user.user_id,
+            session_id=ai_request.session_id,
+            message=ai_request.message,
+            response=parsed.get("response", ""),
+            action_type="execute"
+        )
         
-        await db.ai_messages.insert_one(ai_message)
+        doc = ai_message.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        await db.ai_messages.insert_one(doc)
         
         return {
-            "message": thought,
-            "actionsExecuted": executed_actions,
+            "response": parsed.get("response", ""),
+            "thought": parsed.get("thought", ""),
+            "actions_executed": results,
             "session_id": ai_request.session_id
         }
     
@@ -1018,7 +987,7 @@ Now process: {ai_request.message}"""
         logger.error(f"AI execute error: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI execution error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI service error: {str(e)}")
 
 
 @api_router.get("/ai/history")
@@ -1030,7 +999,7 @@ async def get_ai_history(
     if session_id:
         query["session_id"] = session_id
     
-    history = await db.ai_messages.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    history = await db.ai_messages.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
     
     for msg in history:
         if isinstance(msg.get('created_at'), str):
@@ -1042,63 +1011,84 @@ async def get_ai_history(
 # ===== DASHBOARD STATS =====
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: TokenData = Depends(get_current_user)):
-    stats = {}
-    
     if current_user.role in [UserRole.ADMIN, UserRole.HR]:
-        # HR Dashboard Stats
-        total_users = await db.users.count_documents({})
+        # HR Dashboard stats
+        total_employees = await db.users.count_documents({})
         total_tasks = await db.tasks.count_documents({})
         pending_leaves = await db.leaves.count_documents({"status": LeaveStatus.PENDING})
-        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        present_today = await db.attendance.count_documents({"date": today, "status": {"$ne": AttendanceStatus.ABSENT}})
         
-        stats = {
-            "total_employees": total_users,
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        present_today = await db.attendance.count_documents({
+            "date": today,
+            "status": {"$in": [AttendanceStatus.PRESENT, AttendanceStatus.WFH]}
+        })
+        
+        return {
+            "total_employees": total_employees,
             "total_tasks": total_tasks,
             "pending_leaves": pending_leaves,
             "present_today": present_today
         }
     
     elif current_user.role == UserRole.TEAM_LEAD:
-        # Team Lead Dashboard Stats
-        total_tasks = await db.tasks.count_documents({"created_by": current_user.user_id})
-        pending_tasks = await db.tasks.count_documents({"created_by": current_user.user_id, "status": TaskStatus.TODO})
-        completed_tasks = await db.tasks.count_documents({"created_by": current_user.user_id, "status": TaskStatus.COMPLETED})
+        # Team Lead Dashboard stats
+        my_tasks = await db.tasks.count_documents({"assigned_to": current_user.user_id})
+        team_tasks = await db.tasks.count_documents({"created_by": current_user.user_id})
+        team_tasks_completed = await db.tasks.count_documents({
+            "created_by": current_user.user_id,
+            "status": TaskStatus.COMPLETED
+        })
+        team_tasks_pending = await db.tasks.count_documents({
+            "created_by": current_user.user_id,
+            "status": TaskStatus.TODO
+        })
         
-        stats = {
-            "total_tasks": total_tasks,
-            "pending_tasks": pending_tasks,
-            "completed_tasks": completed_tasks
+        return {
+            "my_tasks": my_tasks,
+            "team_tasks": team_tasks,
+            "team_tasks_completed": team_tasks_completed,
+            "team_tasks_pending": team_tasks_pending
         }
     
     else:
-        # Employee/Intern Dashboard Stats
+        # Employee/Intern Dashboard stats
         my_tasks = await db.tasks.count_documents({"assigned_to": current_user.user_id})
-        pending_tasks = await db.tasks.count_documents({"assigned_to": current_user.user_id, "status": TaskStatus.TODO})
-        completed_tasks = await db.tasks.count_documents({"assigned_to": current_user.user_id, "status": TaskStatus.COMPLETED})
+        pending_tasks = await db.tasks.count_documents({
+            "assigned_to": current_user.user_id,
+            "status": {"$in": [TaskStatus.TODO, TaskStatus.IN_PROGRESS]}
+        })
+        completed_tasks = await db.tasks.count_documents({
+            "assigned_to": current_user.user_id,
+            "status": TaskStatus.COMPLETED
+        })
         my_leaves = await db.leaves.count_documents({"user_id": current_user.user_id})
         
-        stats = {
+        return {
             "my_tasks": my_tasks,
             "pending_tasks": pending_tasks,
             "completed_tasks": completed_tasks,
             "my_leaves": my_leaves
         }
-    
-    return stats
 
 
-# Include router
+# Mount API router
 app.include_router(api_router)
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+
+@app.get("/")
+async def root():
+    return {"message": "OperAI WorkforceOS API", "version": "1.0"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
