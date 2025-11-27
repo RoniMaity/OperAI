@@ -1497,12 +1497,83 @@ If you can't perform an action, return empty actions array [] and explain why in
             result = await executor.execute_action(action_name, params)
             results.append(result)
         
+        # Generate human-friendly message based on results
+        def generate_friendly_message(thought, results):
+            if not results:
+                return thought or "I understand, but I couldn't find any actions to perform."
+            
+            # Count successes
+            successes = [r for r in results if r.get("success")]
+            failures = [r for r in results if not r.get("success")]
+            
+            if failures and not successes:
+                # All failed
+                error_msg = failures[0].get("error", "Unknown error")
+                return f"I couldn't complete that. {error_msg}"
+            elif successes:
+                # At least some succeeded
+                action_name = successes[0].get("action", "action")
+                
+                # Custom messages for common actions
+                if action_name == "list_user_tasks":
+                    count = successes[0].get("details", {}).get("count", 0)
+                    user_name = successes[0].get("details", {}).get("user", "you")
+                    if count == 0:
+                        return f"I found no tasks for {user_name}."
+                    elif count == 1:
+                        return f"I found 1 task for {user_name}."
+                    else:
+                        return f"I found {count} tasks for {user_name}."
+                
+                elif action_name == "get_team_members":
+                    count = successes[0].get("details", {}).get("count", 0)
+                    if count == 0:
+                        return "Your team doesn't have any members yet."
+                    elif count == 1:
+                        return f"You have 1 team member."
+                    else:
+                        return f"You have {count} team members."
+                
+                elif action_name == "summarize_tasks":
+                    total = successes[0].get("details", {}).get("total", 0)
+                    if total == 0:
+                        return "You have no tasks assigned."
+                    return f"Here's your task summary. You have {total} tasks total."
+                
+                elif action_name == "get_attendance_summary":
+                    today_status = successes[0].get("details", {}).get("today", {}).get("status")
+                    if today_status == "not_marked":
+                        return "You haven't marked attendance today yet. Here's your recent history."
+                    return "Here's your attendance summary."
+                
+                elif action_name == "apply_leave":
+                    return "Done! I've submitted your leave application."
+                
+                elif action_name == "mark_attendance":
+                    work_mode = successes[0].get("details", {}).get("work_mode", "").upper()
+                    return f"Perfect! I've marked your attendance as {work_mode} for today."
+                
+                elif action_name == "create_task":
+                    assigned_to = successes[0].get("details", {}).get("assigned_to", "the user")
+                    return f"Done! I've created the task and assigned it to {assigned_to}."
+                
+                elif action_name == "update_task_status":
+                    status = successes[0].get("details", {}).get("new_status", "updated")
+                    return f"Task status updated to {status}."
+                
+                # Generic success
+                return thought or "Done! Action completed successfully."
+            
+            return thought or "Action completed."
+        
+        friendly_message = generate_friendly_message(parsed.get("thought", ""), results)
+        
         # Save to database
         ai_message = AIMessage(
             user_id=current_user.user_id,
             session_id=ai_request.session_id,
             message=ai_request.message,
-            response=parsed.get("thought", ""),
+            response=friendly_message,
             action_type="execute",
             actions_executed=results
         )
@@ -1512,7 +1583,7 @@ If you can't perform an action, return empty actions array [] and explain why in
         await db.ai_messages.insert_one(doc)
         
         return {
-            "message": parsed.get("thought", ""),
+            "message": friendly_message,
             "thought": parsed.get("thought", ""),
             "actionsExecuted": results,
             "session_id": ai_request.session_id
