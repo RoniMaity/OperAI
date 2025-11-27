@@ -13,7 +13,18 @@ export default function AIAssistantPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [sessionId, setSessionId] = useState(() => `session_${Date.now()}`);
+  
+  // Initialize sessionId from localStorage or create new
+  const [sessionId, setSessionId] = useState(() => {
+    const stored = localStorage.getItem('operai_ai_session_id');
+    if (stored) {
+      return stored;
+    }
+    const newId = `session_${Date.now()}`;
+    localStorage.setItem('operai_ai_session_id', newId);
+    return newId;
+  });
+  
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -24,6 +35,7 @@ export default function AIAssistantPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Load chat history when component mounts or session changes
   useEffect(() => {
     loadChatHistory();
   }, [sessionId]);
@@ -53,9 +65,14 @@ export default function AIAssistantPage() {
           return msgs;
         });
         setMessages(loadedMessages);
+      } else {
+        // No history found, clear messages
+        setMessages([]);
       }
     } catch (error) {
       console.error('Failed to load chat history:', error);
+      // Don't show error to user, just start fresh
+      setMessages([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -64,6 +81,7 @@ export default function AIAssistantPage() {
   const startNewChat = () => {
     const newSessionId = `session_${Date.now()}`;
     setSessionId(newSessionId);
+    localStorage.setItem('operai_ai_session_id', newSessionId);
     setMessages([]);
     toast.success('New chat started');
   };
