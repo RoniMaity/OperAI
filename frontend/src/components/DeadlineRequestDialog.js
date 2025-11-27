@@ -37,8 +37,8 @@ export default function DeadlineRequestDialog({ task, onRequest, children }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {children || (
-          <Button size=\"sm\" variant=\"outline\">
-            <CalendarClock className=\"h-3 w-3 mr-1\" />
+          <Button size="sm" variant="outline">
+            <CalendarClock className="h-3 w-3 mr-1" />
             Request Extension
           </Button>
         )}
@@ -47,42 +47,42 @@ export default function DeadlineRequestDialog({ task, onRequest, children }) {
         <DialogHeader>
           <DialogTitle>Request Deadline Extension</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className=\"space-y-4\">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <p className=\"text-sm text-muted-foreground mb-2\">
-              Task: <span className=\"font-medium text-foreground\">{task.title}</span>
+            <p className="text-sm text-muted-foreground mb-2">
+              Task: <span className="font-medium text-foreground">{task.title}</span>
             </p>
-            <p className=\"text-xs text-muted-foreground\">
+            <p className="text-xs text-muted-foreground">
               Current deadline: {task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline set'}
             </p>
           </div>
-          <div className=\"space-y-2\">
-            <Label htmlFor=\"new_deadline\">Requested New Deadline</Label>
+          <div className="space-y-2">
+            <Label htmlFor="new_deadline">Requested New Deadline</Label>
             <Input
-              id=\"new_deadline\"
-              type=\"date\"
+              id="new_deadline"
+              type="date"
               value={formData.requested_new_deadline}
               onChange={(e) => setFormData({...formData, requested_new_deadline: e.target.value})}
               required
               min={new Date().toISOString().split('T')[0]}
             />
           </div>
-          <div className=\"space-y-2\">
-            <Label htmlFor=\"reason\">Reason for Extension</Label>
+          <div className="space-y-2">
+            <Label htmlFor="reason">Reason for Extension</Label>
             <Textarea
-              id=\"reason\"
+              id="reason"
               value={formData.reason}
               onChange={(e) => setFormData({...formData, reason: e.target.value})}
-              placeholder=\"Explain why you need more time...\"
+              placeholder="Explain why you need more time..."
               rows={4}
               required
             />
           </div>
-          <div className=\"flex gap-2 justify-end\">
-            <Button type=\"button\" variant=\"outline\" onClick={() => setOpen(false)}>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type=\"submit\" disabled={loading}>
+            <Button type="submit" disabled={loading}>
               {loading ? 'Submitting...' : 'Submit Request'}
             </Button>
           </div>

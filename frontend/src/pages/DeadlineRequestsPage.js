@@ -76,8 +76,8 @@ export default function DeadlineRequestsPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className=\"flex items-center justify-center h-64\">
-          <div className=\"animate-spin rounded-full h-12 w-12 border-b-2 border-primary\"></div>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       </DashboardLayout>
     );
@@ -85,10 +85,10 @@ export default function DeadlineRequestsPage() {
 
   return (
     <DashboardLayout>
-      <div className=\"space-y-6\">
+      <div className="space-y-6">
         <div>
-          <h1 className=\"text-3xl font-bold tracking-tight text-foreground\">Deadline Requests</h1>
-          <p className=\"text-muted-foreground\">Review and approve deadline extension requests</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Deadline Requests</h1>
+          <p className="text-muted-foreground">Review and approve deadline extension requests</p>
         </div>
 
         <Card>
@@ -97,68 +97,68 @@ export default function DeadlineRequestsPage() {
           </CardHeader>
           <CardContent>
             {requests.length === 0 ? (
-              <div className=\"text-center py-12\">
-                <CalendarClock className=\"h-12 w-12 text-muted-foreground mx-auto mb-3\" />
-                <p className=\"text-sm text-muted-foreground\">No pending deadline requests</p>
+              <div className="text-center py-12">
+                <CalendarClock className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">No pending deadline requests</p>
               </div>
             ) : (
-              <div className=\"space-y-4\">
+              <div className="space-y-4">
                 {requests.map((request) => {
                   const task = tasks[request.task_id];
                   const requester = users[request.requested_by];
                   
                   return (
-                    <div key={request.id} className=\"border rounded-lg p-4 space-y-3\">
-                      <div className=\"flex items-start justify-between\">
-                        <div className=\"space-y-1 flex-1\">
-                          <div className=\"flex items-center gap-2\">
-                            <h3 className=\"font-semibold\">{task?.title || 'Unknown Task'}</h3>
-                            <Badge variant=\"outline\" className=\"text-xs\">{task?.priority || 'medium'}</Badge>
+                    <div key={request.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{task?.title || 'Unknown Task'}</h3>
+                            <Badge variant="outline" className="text-xs">{task?.priority || 'medium'}</Badge>
                           </div>
-                          <p className=\"text-sm text-muted-foreground\">
+                          <p className="text-sm text-muted-foreground">
                             Requested by: {requester?.name || 'Unknown'} ({requester?.email || 'N/A'})
                           </p>
                         </div>
-                        <div className=\"flex gap-2\">
+                        <div className="flex gap-2">
                           <Button
-                            size=\"sm\"
-                            variant=\"default\"
-                            className=\"bg-green-600 hover:bg-green-700\"
+                            size="sm"
+                            variant="default"
+                            className="bg-green-600 hover:bg-green-700"
                             onClick={() => openResponseDialog(request, 'approved')}
                           >
-                            <Check className=\"h-4 w-4 mr-1\" />
+                            <Check className="h-4 w-4 mr-1" />
                             Approve
                           </Button>
                           <Button
-                            size=\"sm\"
-                            variant=\"destructive\"
+                            size="sm"
+                            variant="destructive"
                             onClick={() => openResponseDialog(request, 'rejected')}
                           >
-                            <X className=\"h-4 w-4 mr-1\" />
+                            <X className="h-4 w-4 mr-1" />
                             Reject
                           </Button>
                         </div>
                       </div>
                       
-                      <div className=\"grid grid-cols-2 gap-4 text-sm\">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <span className=\"font-medium\">Current Deadline:</span>{' '}
+                          <span className="font-medium">Current Deadline:</span>{' '}
                           {task?.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline'}
                         </div>
                         <div>
-                          <span className=\"font-medium\">Requested Deadline:</span>{' '}
-                          <span className=\"text-blue-600 dark:text-blue-400 font-semibold\">
+                          <span className="font-medium">Requested Deadline:</span>{' '}
+                          <span className="text-blue-600 dark:text-blue-400 font-semibold">
                             {new Date(request.requested_new_deadline).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
                       
-                      <div className=\"text-sm\">
-                        <span className=\"font-medium\">Reason:</span>
-                        <p className=\"mt-1 text-muted-foreground\">{request.reason}</p>
+                      <div className="text-sm">
+                        <span className="font-medium">Reason:</span>
+                        <p className="mt-1 text-muted-foreground">{request.reason}</p>
                       </div>
                       
-                      <div className=\"text-xs text-muted-foreground\">
+                      <div className="text-xs text-muted-foreground">
                         Requested on: {new Date(request.created_at).toLocaleString()}
                       </div>
                     </div>
@@ -177,30 +177,30 @@ export default function DeadlineRequestsPage() {
                 {responseDialog.action === 'approved' ? 'Approve' : 'Reject'} Deadline Request
               </DialogTitle>
             </DialogHeader>
-            <div className=\"space-y-4\">
+            <div className="space-y-4">
               <div>
-                <p className=\"text-sm\">
+                <p className="text-sm">
                   Are you sure you want to <strong>{responseDialog.action === 'approved' ? 'approve' : 'reject'}</strong> this request?
                 </p>
                 {responseDialog.action === 'approved' && (
-                  <p className=\"text-xs text-muted-foreground mt-2\">
+                  <p className="text-xs text-muted-foreground mt-2">
                     The task deadline will be automatically updated to the requested date.
                   </p>
                 )}
               </div>
               
-              <div className=\"space-y-2\">
-                <Label htmlFor=\"response_note\">Note (optional)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="response_note">Note (optional)</Label>
                 <Input
-                  id=\"response_note\"
+                  id="response_note"
                   value={responseNote}
                   onChange={(e) => setResponseNote(e.target.value)}
-                  placeholder=\"Add a note for the requester...\"
+                  placeholder="Add a note for the requester..."
                 />
               </div>
               
-              <div className=\"flex gap-2 justify-end\">
-                <Button variant=\"outline\" onClick={() => setResponseDialog({ open: false, request: null, action: null })}>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setResponseDialog({ open: false, request: null, action: null })}>
                   Cancel
                 </Button>
                 <Button

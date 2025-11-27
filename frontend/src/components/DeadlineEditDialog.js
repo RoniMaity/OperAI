@@ -36,8 +36,8 @@ export default function DeadlineEditDialog({ task, onUpdate, children }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {children || (
-          <Button size=\"sm\" variant=\"outline\">
-            <Calendar className=\"h-3 w-3 mr-1\" />
+          <Button size="sm" variant="outline">
+            <Calendar className="h-3 w-3 mr-1" />
             Edit Deadline
           </Button>
         )}
@@ -46,27 +46,27 @@ export default function DeadlineEditDialog({ task, onUpdate, children }) {
         <DialogHeader>
           <DialogTitle>Update Task Deadline</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className=\"space-y-4\">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <p className=\"text-sm text-muted-foreground mb-4\">
-              Task: <span className=\"font-medium text-foreground\">{task.title}</span>
+            <p className="text-sm text-muted-foreground mb-4">
+              Task: <span className="font-medium text-foreground">{task.title}</span>
             </p>
           </div>
-          <div className=\"space-y-2\">
-            <Label htmlFor=\"deadline\">New Deadline</Label>
+          <div className="space-y-2">
+            <Label htmlFor="deadline">New Deadline</Label>
             <Input
-              id=\"deadline\"
-              type=\"date\"
+              id="deadline"
+              type="date"
               value={newDeadline}
               onChange={(e) => setNewDeadline(e.target.value)}
               required
             />
           </div>
-          <div className=\"flex gap-2 justify-end\">
-            <Button type=\"button\" variant=\"outline\" onClick={() => setOpen(false)}>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type=\"submit\" disabled={loading}>
+            <Button type="submit" disabled={loading}>
               {loading ? 'Updating...' : 'Update Deadline'}
             </Button>
           </div>
