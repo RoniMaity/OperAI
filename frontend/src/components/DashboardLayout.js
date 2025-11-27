@@ -54,6 +54,7 @@ export default function DashboardLayout({ children }) {
         { name: 'Employees', icon: Users, path: '/employees' },
         { name: 'Tasks', icon: CheckSquare, path: '/tasks' },
         { name: 'Leaves', icon: FileText, path: '/leaves' },
+        { name: 'Deadline Requests', icon: CalendarClock, path: '/deadline-requests' },
         { name: 'Attendance', icon: Calendar, path: '/attendance' },
         { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
         { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
@@ -63,7 +64,12 @@ export default function DashboardLayout({ children }) {
     if (user?.role === 'team_lead') {
       return [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/team-dashboard' },
-        ...baseItems.slice(1)
+        { name: 'Tasks', icon: CheckSquare, path: '/tasks' },
+        { name: 'Deadline Requests', icon: CalendarClock, path: '/deadline-requests' },
+        { name: 'Attendance', icon: Calendar, path: '/attendance' },
+        { name: 'Leave', icon: FileText, path: '/leave' },
+        { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
+        { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
       ];
     }
 
