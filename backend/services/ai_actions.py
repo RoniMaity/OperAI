@@ -59,11 +59,30 @@ class AIActionExecutor:
             }
         
         task_id = str(uuid.uuid4())
-        assigned_to = params.get("assigned_to", self.user_id)
+        
+        # Support both assigned_to (user_id) and assigned_to_email
+        assigned_to = params.get("assigned_to")
+        assigned_to_email = params.get("assigned_to_email")
+        
+        # If email is provided, look up user ID
+        if assigned_to_email:
+            user = await self.db.users.find_one({"email": assigned_to_email})
+            if user:
+                assigned_to = user["id"]
+            else:
+                return {
+                    "success": False,
+                    "action": "create_task",
+                    "error": f"User not found with email: {assigned_to_email}"
+                }
+        
+        # If no assignee specified, assign to self
+        if not assigned_to:
+            assigned_to = self.user_id
         
         # Verify assignee exists
         assignee = await self.db.users.find_one({"id": assigned_to})
-        if not assignee and assigned_to != self.user_id:
+        if not assignee:
             return {
                 "success": False,
                 "action": "create_task",
@@ -78,7 +97,7 @@ class AIActionExecutor:
             "created_by": self.user_id,
             "status": "todo",
             "priority": params.get("priority", "medium"),
-            "progress": 0,
+            "progress": 0,  # Always start with 0
             "deadline": params.get("deadline"),
             "notes": "",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -93,7 +112,8 @@ class AIActionExecutor:
             "details": {
                 "task_id": task_id,
                 "title": params.get("title"),
-                "assigned_to": assigned_to,
+                "assigned_to": assignee.get("name"),
+                "assigned_to_email": assignee.get("email"),
                 "priority": params.get("priority", "medium"),
                 "deadline": params.get("deadline")
             }
