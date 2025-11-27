@@ -807,6 +807,11 @@ async def ai_execute(
     try:
         from services.ai_actions import AIActionExecutor, get_action_definitions
         import json
+        from datetime import datetime, timedelta
+        
+        # Get current user details
+        user_doc = await db.users.find_one({"id": current_user.user_id})
+        user_email = user_doc.get("email") if user_doc else current_user.email
         
         # Get available actions for user's role
         all_actions = get_action_definitions()
@@ -815,88 +820,98 @@ async def ai_execute(
             if current_user.role in a["permissions"]
         ]
         
-        # Build system prompt
-        actions_list = "\n".join([
-            f"- {a['name']}: {a['description']}\n  Parameters: {json.dumps(a['parameters'], indent=4)}"
-            for a in allowed_actions
-        ])
+        # Build actions documentation
+        actions_doc = []
+        for a in allowed_actions:
+            params_str = ", ".join([f"{k}: {v}" for k, v in a["parameters"].items()])
+            actions_doc.append(f"  {a['name']}({params_str})")
+            actions_doc.append(f"    Purpose: {a['description']}")
         
-        system_prompt = f"""You are OperAI Intelligence, the operational AI engine for the OperAI workforce management platform.
+        actions_list = "\n".join(actions_doc)
+        
+        # Calculate dates for context
+        today = datetime.now(timezone.utc)
+        tomorrow = today + timedelta(days=1)
+        next_monday = today + timedelta(days=(7 - today.weekday()))
+        next_friday = today + timedelta(days=(4 - today.weekday()) if today.weekday() <= 4 else (11 - today.weekday()))
+        
+        system_prompt = f"""You are OperAI Intelligence - the operational AI for OperAI workforce platform.
+You can EXECUTE ACTIONS in the system through natural language commands.
 
-You are an AI that can TAKE ACTIONS in the system, not just provide information.
+CURRENT CONTEXT:
+User: {user_email}
+Role: {current_user.role}
+Today: {today.strftime('%Y-%m-%d')} ({today.strftime('%A')})
+Tomorrow: {tomorrow.strftime('%Y-%m-%d')}
+Next Monday: {next_monday.strftime('%Y-%m-%d')}
+Next Friday: {next_friday.strftime('%Y-%m-%d')}
 
-Current user: {current_user.email}
-User role: {current_user.role}
-
-AVAILABLE ACTIONS FOR THIS ROLE:
+AVAILABLE ACTIONS:
 {actions_list}
 
-INSTRUCTIONS:
-1. Analyze the user's request
-2. Determine which action(s) to execute
-3. Extract parameters from the natural language input
-4. Return a JSON response with this EXACT structure:
+OUTPUT FORMAT (MUST BE VALID JSON):
 {{
-  "explanation": "Brief explanation of what you understood and will do",
+  "thought": "What I understood from the user's request",
   "actions": [
     {{
-      "action": "action_name",
-      "params": {{"param1": "value1", "param2": "value2"}}
+      "name": "action_name",
+      "params": {{
+        "param1": "value1"
+      }}
     }}
   ]
 }}
 
 RULES:
-- ALWAYS respond with valid JSON
-- Use action names exactly as listed above
-- Extract dates in YYYY-MM-DD format
-- For task IDs, leave IDs, user IDs - ask the user if not provided
-- If the request is ambiguous, ask for clarification in the explanation
-- If the user lacks permissions, explain this in the explanation and set actions to []
+1. Always output valid JSON
+2. Use exact action names from the list above
+3. Extract all required parameters from user's natural language
+4. Convert relative dates ("tomorrow", "next Monday") to YYYY-MM-DD format
+5. If information is missing, include it in thought and set actions to []
+6. If user lacks permissions, explain in thought and set actions to []
 
 EXAMPLES:
 
-User: "Create a task for me to review the Q1 report by next Friday"
-Response:
+Input: "Create a task to review documentation by next Friday"
+Output:
 {{
-  "explanation": "I'll create a high-priority task for you to review the Q1 report with a deadline of next Friday.",
+  "thought": "User wants to create a task with a deadline of next Friday",
   "actions": [
     {{
-      "action": "create_task",
+      "name": "create_task",
       "params": {{
-        "title": "Review Q1 report",
-        "description": "Complete review of Q1 report",
-        "priority": "high",
-        "deadline": "2025-01-17"
+        "title": "Review documentation",
+        "priority": "medium",
+        "deadline": "{next_friday.strftime('%Y-%m-%d')}"
       }}
     }}
   ]
 }}
 
-User: "Apply for leave next Monday and Tuesday for personal work"
-Response:
+Input: "Apply for sick leave tomorrow"
+Output:
 {{
-  "explanation": "I'll apply for casual leave for you from Monday Jan 13 to Tuesday Jan 14 for personal work.",
+  "thought": "User wants to apply for sick leave for tomorrow",
   "actions": [
     {{
-      "action": "apply_leave",
+      "name": "apply_leave",
       "params": {{
-        "leave_type": "casual",
-        "start_date": "2025-01-13",
-        "end_date": "2025-01-14",
-        "reason": "Personal work"
+        "leave_type": "sick",
+        "start_date": "{tomorrow.strftime('%Y-%m-%d')}",
+        "end_date": "{tomorrow.strftime('%Y-%m-%d')}",
+        "reason": "Sick leave"
       }}
     }}
   ]
 }}
 
-User: "Mark my attendance as WFH for today"
-Response:
+Input: "Mark my attendance as work from home"
+Output:
 {{
-  "explanation": "I'll mark your attendance as Work From Home for today.",
+  "thought": "User wants to mark attendance as WFH for today",
   "actions": [
     {{
-      "action": "mark_attendance",
+      "name": "mark_attendance",
       "params": {{
         "work_mode": "wfh"
       }}
@@ -904,7 +919,33 @@ Response:
   ]
 }}
 
-Now process the user's request."""
+Input: "Show me my active tasks and mark the first one as completed"
+Output:
+{{
+  "thought": "User wants to list tasks first. I'll list them, but cannot auto-complete without task ID",
+  "actions": [
+    {{
+      "name": "list_user_tasks",
+      "params": {{
+        "status": "in_progress"
+      }}
+    }}
+  ]
+}}
+
+Input: "List all pending leaves and approve the first one" (as HR)
+Output:
+{{
+  "thought": "User wants to list pending leaves. I'll list them first",
+  "actions": [
+    {{
+      "name": "list_pending_leaves",
+      "params": {{}}
+    }}
+  ]
+}}
+
+Now process: {ai_request.message}"""
 
         # Initialize AI
         chat = LlmChat(
@@ -921,7 +962,6 @@ Now process the user's request."""
         
         # Parse AI response
         try:
-            # Clean response - remove markdown code blocks if present
             cleaned_response = ai_response.strip()
             if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]
@@ -932,23 +972,27 @@ Now process the user's request."""
             cleaned_response = cleaned_response.strip()
             
             parsed = json.loads(cleaned_response)
-            explanation = parsed.get("explanation", "Processing your request...")
+            thought = parsed.get("thought", "Processing...")
             actions_to_execute = parsed.get("actions", [])
-        except json.JSONDecodeError:
-            # If AI didn't return JSON, treat as explanation only
-            explanation = ai_response
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {str(e)}, Response: {ai_response}")
+            thought = "I couldn't properly parse the request. Please try rephrasing."
             actions_to_execute = []
         
         # Execute actions
-        executor = AIActionExecutor(db, current_user.user_id, current_user.role)
+        executor = AIActionExecutor(db, current_user.user_id, current_user.role, user_email)
         executed_actions = []
         
         for action_spec in actions_to_execute:
-            action_name = action_spec.get("action")
+            action_name = action_spec.get("name")
             params = action_spec.get("params", {})
             
             result = await executor.execute_action(action_name, params)
-            executed_actions.append(result)
+            executed_actions.append({
+                "name": action_name,
+                "params": params,
+                "result": result
+            })
         
         # Save to database
         ai_message = {
@@ -956,7 +1000,7 @@ Now process the user's request."""
             "user_id": current_user.user_id,
             "session_id": ai_request.session_id,
             "message": ai_request.message,
-            "response": explanation,
+            "response": thought,
             "action_type": "execute",
             "actions_executed": executed_actions,
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -965,8 +1009,8 @@ Now process the user's request."""
         await db.ai_messages.insert_one(ai_message)
         
         return {
-            "explanation": explanation,
-            "actions": executed_actions,
+            "message": thought,
+            "actionsExecuted": executed_actions,
             "session_id": ai_request.session_id
         }
     
