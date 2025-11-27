@@ -213,12 +213,17 @@ class AIActionExecutor:
     
     async def _list_user_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """List tasks for current user or specified user"""
-        user_id = params.get("user_id", self.user_id)
+        user_id = params.get("user_id")
         status_filter = params.get("status")
         
-        # Permission check
-        if user_id != self.user_id and self.user_role not in ["admin", "hr", "team_lead"]:
-            return {"success": False, "action": "list_user_tasks", "error": "Cannot view other users' tasks"}
+        # Permission check: non-privileged users can only view their own tasks
+        if self.user_role not in ["admin", "hr", "team_lead"]:
+            # Force to current user's tasks regardless of what was requested
+            user_id = self.user_id
+        else:
+            # Privileged users can view specified user or default to self
+            if not user_id:
+                user_id = self.user_id
         
         query = {"assigned_to": user_id}
         if status_filter:
