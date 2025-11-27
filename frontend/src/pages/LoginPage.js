@@ -23,7 +23,6 @@ export default function LoginPage() {
       const user = await login(email, password);
       toast.success(`Welcome back, ${user.name}!`);
       
-      // Navigate based on role
       switch(user.role) {
         case 'admin':
         case 'hr':
@@ -47,20 +46,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen grid-pattern flex items-center justify-center p-4" data-testid="login-page">
-      <Card className="w-full max-w-md shadow-2xl border-0">
+    <div className="min-h-screen grid-pattern flex items-center justify-center p-4 bg-background transition-colors duration-300" data-testid="login-page">
+      <Card className="w-full max-w-md shadow-2xl border-border bg-card">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-3xl font-bold tracking-tight" data-testid="login-title">
-            WorkforceOS
+          <CardTitle className="text-3xl font-bold tracking-tight text-foreground" data-testid="login-title">
+            OperAI
           </CardTitle>
-          <CardDescription data-testid="login-description">
-            Enterprise Workforce Management Platform
+          <CardDescription className="text-muted-foreground" data-testid="login-description">
+            Enterprise Workforce Intelligence Platform
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-foreground">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -69,11 +68,11 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="login-email-input"
-                className="h-11"
+                className="h-11 bg-background border-input text-foreground"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-foreground">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -82,12 +81,12 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 data-testid="login-password-input"
-                className="h-11"
+                className="h-11 bg-background border-input text-foreground"
               />
             </div>
             <Button
               type="submit"
-              className="w-full h-11"
+              className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={loading}
               data-testid="login-submit-btn"
             >

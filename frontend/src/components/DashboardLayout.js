@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ThemeToggle } from './ThemeToggle';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import {
@@ -43,7 +44,7 @@ export default function DashboardLayout({ children }) {
       { name: 'Attendance', icon: Calendar, path: '/attendance' },
       { name: 'Leave', icon: FileText, path: '/leave' },
       { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
-      { name: 'AI Assistant', icon: Briefcase, path: '/ai-assistant' },
+      { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
     ];
 
     if (user?.role === 'admin' || user?.role === 'hr') {
@@ -54,7 +55,7 @@ export default function DashboardLayout({ children }) {
         { name: 'Attendance', icon: Calendar, path: '/attendance' },
         { name: 'Leave', icon: FileText, path: '/leave' },
         { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
-        { name: 'AI Assistant', icon: Briefcase, path: '/ai-assistant' },
+        { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
       ];
     }
 
@@ -71,9 +72,8 @@ export default function DashboardLayout({ children }) {
   const navItems = getNavItems();
 
   return (
-    <div className="min-h-screen bg-background" data-testid="dashboard-layout">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen bg-background transition-colors duration-300" data-testid="dashboard-layout">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 items-center px-4 gap-4">
           <Button
             variant="ghost"
@@ -86,10 +86,13 @@ export default function DashboardLayout({ children }) {
           </Button>
           
           <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight" data-testid="dashboard-header-title">
-              WorkforceOS
+            <h1 className="text-xl font-bold tracking-tight text-foreground" data-testid="dashboard-header-title">
+              OperAI
             </h1>
+            <p className="text-xs text-muted-foreground">Workforce Intelligence</p>
           </div>
+
+          <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -101,10 +104,10 @@ export default function DashboardLayout({ children }) {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none" data-testid="user-menu-name">{user?.name}</p>
+                  <p className="text-sm font-medium leading-none text-popover-foreground" data-testid="user-menu-name">{user?.name}</p>
                   <p className="text-xs leading-none text-muted-foreground" data-testid="user-menu-email">{user?.email}</p>
                   <p className="text-xs leading-none text-muted-foreground mt-1">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
@@ -113,13 +116,13 @@ export default function DashboardLayout({ children }) {
                   </p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/profile')} data-testid="profile-menu-item">
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem onClick={() => navigate('/profile')} data-testid="profile-menu-item" className="text-popover-foreground">
                 <Settings className="mr-2 h-4 w-4" />
                 Profile Settings
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} data-testid="logout-menu-item">
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem onClick={handleLogout} data-testid="logout-menu-item" className="text-popover-foreground">
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>
@@ -129,11 +132,10 @@ export default function DashboardLayout({ children }) {
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
         <aside
           className={`${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } fixed inset-y-0 z-40 w-64 border-r bg-background transition-transform duration-300 ease-in-out md:translate-x-0 md:static`}
+          } fixed inset-y-0 z-40 w-64 border-r border-border bg-card transition-transform duration-300 ease-in-out md:translate-x-0 md:static`}
           data-testid="sidebar"
         >
           <nav className="flex flex-col gap-1 p-4 pt-20 md:pt-4">
@@ -160,7 +162,6 @@ export default function DashboardLayout({ children }) {
           </nav>
         </aside>
 
-        {/* Mobile overlay */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm md:hidden"
@@ -168,8 +169,7 @@ export default function DashboardLayout({ children }) {
           />
         )}
 
-        {/* Main Content */}
-        <main className="flex-1 p-6" data-testid="dashboard-content">
+        <main className="flex-1 p-6 bg-background" data-testid="dashboard-content">
           {children}
         </main>
       </div>
