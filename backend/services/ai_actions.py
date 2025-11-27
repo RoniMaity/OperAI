@@ -52,16 +52,29 @@ class AIActionExecutor:
     async def _create_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new task"""
         if self.user_role not in ["admin", "hr", "team_lead"]:
-            return {"success": False, "error": "Insufficient permissions to create tasks"}
+            return {
+                "success": False,
+                "action": "create_task",
+                "error": "Only HR, Admin, and Team Leads can create tasks"
+            }
         
-        import uuid
         task_id = str(uuid.uuid4())
+        assigned_to = params.get("assigned_to", self.user_id)
+        
+        # Verify assignee exists
+        assignee = await self.db.users.find_one({"id": assigned_to})
+        if not assignee and assigned_to != self.user_id:
+            return {
+                "success": False,
+                "action": "create_task",
+                "error": f"User not found: {assigned_to}"
+            }
         
         task = {
             "id": task_id,
             "title": params.get("title"),
             "description": params.get("description", ""),
-            "assigned_to": params.get("assigned_to", self.user_id),
+            "assigned_to": assigned_to,
             "created_by": self.user_id,
             "status": "todo",
             "priority": params.get("priority", "medium"),
@@ -80,8 +93,9 @@ class AIActionExecutor:
             "details": {
                 "task_id": task_id,
                 "title": params.get("title"),
-                "assigned_to": params.get("assigned_to", self.user_id),
-                "priority": params.get("priority", "medium")
+                "assigned_to": assigned_to,
+                "priority": params.get("priority", "medium"),
+                "deadline": params.get("deadline")
             }
         }
     
