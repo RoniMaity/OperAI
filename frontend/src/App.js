@@ -77,6 +77,7 @@ function App() {
             <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
             <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
             <Route path="/leaves" element={<ProtectedRoute><LeaveListPage /></ProtectedRoute>} />
+            <Route path="/deadline-requests" element={<ProtectedRoute><DeadlineRequestsPage /></ProtectedRoute>} />
             <Route path="/announcements" element={<ProtectedRoute><AnnouncementsPage /></ProtectedRoute>} />
             <Route path="/ai-assistant" element={<ProtectedRoute><AIAssistantPage /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
