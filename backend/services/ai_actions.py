@@ -687,6 +687,113 @@ class AIActionExecutor:
         }
 
 
+    async def _summarize_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Summarize current user's tasks"""
+        try:
+            # Fetch user's tasks
+            tasks = await self.db.tasks.find({"assigned_to": self.user_id}).to_list(100)
+            
+            # Count by status
+            status_counts = {
+                "todo": 0,
+                "in_progress": 0,
+                "completed": 0,
+                "blocked": 0
+            }
+            
+            for task in tasks:
+                status = task.get("status", "todo")
+                if status in status_counts:
+                    status_counts[status] += 1
+            
+            # Get urgent tasks (sorted by deadline and priority)
+            urgent_tasks = []
+            for task in tasks:
+                if task.get("status") in ["todo", "in_progress"]:
+                    urgent_tasks.append(task)
+            
+            # Sort by deadline (closest first) and priority
+            priority_order = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
+            urgent_tasks.sort(key=lambda t: (
+                t.get("deadline", "9999-12-31"),
+                priority_order.get(t.get("priority", "medium"), 2)
+            ))
+            
+            top_tasks = []
+            for task in urgent_tasks[:5]:
+                top_tasks.append({
+                    "title": task.get("title"),
+                    "priority": task.get("priority", "medium"),
+                    "deadline": task.get("deadline", "No deadline"),
+                    "progress": task.get("progress", 0)
+                })
+            
+            return {
+                "success": True,
+                "action": "summarize_tasks",
+                "details": {
+                    "total_tasks": len(tasks),
+                    "by_status": status_counts,
+                    "top_5_urgent": top_tasks
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "action": "summarize_tasks",
+                "error": str(e)
+            }
+    
+    async def _summarize_notifications(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Summarize recent notifications for current user"""
+        try:
+            # Fetch user's notifications
+            query = {
+                "$or": [
+                    {"user_id": self.user_id},
+                    {"target_roles": self.user_role}
+                ]
+            }
+            notifications = await self.db.notifications.find(query).sort("created_at", -1).limit(20).to_list(20)
+            
+            # Group by type and read status
+            type_counts = {}
+            unread_count = 0
+            
+            for notif in notifications:
+                notif_type = notif.get("type", "other")
+                type_counts[notif_type] = type_counts.get(notif_type, 0) + 1
+                if not notif.get("is_read", False):
+                    unread_count += 1
+            
+            # Get recent unread titles
+            recent_unread = []
+            for notif in notifications:
+                if not notif.get("is_read", False) and len(recent_unread) < 5:
+                    recent_unread.append({
+                        "title": notif.get("title"),
+                        "type": notif.get("type"),
+                        "created_at": notif.get("created_at")
+                    })
+            
+            return {
+                "success": True,
+                "action": "summarize_notifications",
+                "details": {
+                    "total_notifications": len(notifications),
+                    "unread_count": unread_count,
+                    "by_type": type_counts,
+                    "recent_unread": recent_unread
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "action": "summarize_notifications",
+                "error": str(e)
+            }
+
+
 def get_action_definitions() -> List[Dict[str, Any]]:
     """Return available actions with descriptions"""
     return [
