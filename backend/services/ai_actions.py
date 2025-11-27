@@ -1196,8 +1196,11 @@ def get_action_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "get_attendance_summary",
-            "description": "Get today's attendance and last 7-day summary for the current user",
-            "parameters": {},
+            "description": "Get today's attendance and last 7-day summary for a user (self by default, or specify user_email/user_id with proper permissions)",
+            "parameters": {
+                "user_id": "Optional: target user id (admin/hr/team_lead only for subordinates)",
+                "user_email": "Optional: target user email (admin/hr/team_lead only for subordinates)"
+            },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
