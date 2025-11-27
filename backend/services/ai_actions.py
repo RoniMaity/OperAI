@@ -137,11 +137,19 @@ class AIActionExecutor:
         
         update_fields = {"updated_at": datetime.now(timezone.utc).isoformat()}
         
+        # Smart progress defaults based on status
         if new_status:
             update_fields["status"] = new_status
-            if new_status == "completed" and progress != 100:
+            
+            # If status is changing to in_progress and no progress provided, default to 30
+            if new_status == "in_progress" and progress is None and task.get("progress", 0) == 0:
+                update_fields["progress"] = 30
+            
+            # If status is completed, always set progress to 100
+            if new_status == "completed":
                 update_fields["progress"] = 100
         
+        # If progress is explicitly provided, use it (clamped to 0-100)
         if progress is not None:
             update_fields["progress"] = min(100, max(0, int(progress)))
         
