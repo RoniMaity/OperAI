@@ -37,51 +37,51 @@ export default function HRDashboard() {
     <DashboardLayout>
       <div className="space-y-6" data-testid="hr-dashboard">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="dashboard-title">HR Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground" data-testid="dashboard-title">HR Dashboard</h1>
           <p className="text-muted-foreground">Manage your workforce operations</p>
         </div>
 
         <div className="dashboard-grid">
-          <Card className="stat-card" data-testid="stat-total-employees">
+          <Card className="stat-card bg-card border-border" data-testid="stat-total-employees">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">Total Employees</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.total_employees || 0}</div>
+              <div className="text-2xl font-bold text-card-foreground">{stats?.total_employees || 0}</div>
               <p className="text-xs text-muted-foreground">Active workforce</p>
             </CardContent>
           </Card>
 
-          <Card className="stat-card" data-testid="stat-total-tasks">
+          <Card className="stat-card bg-card border-border" data-testid="stat-total-tasks">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">Total Tasks</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.total_tasks || 0}</div>
+              <div className="text-2xl font-bold text-card-foreground">{stats?.total_tasks || 0}</div>
               <p className="text-xs text-muted-foreground">All tasks</p>
             </CardContent>
           </Card>
 
-          <Card className="stat-card" data-testid="stat-pending-leaves">
+          <Card className="stat-card bg-card border-border" data-testid="stat-pending-leaves">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Leaves</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">Pending Leaves</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.pending_leaves || 0}</div>
+              <div className="text-2xl font-bold text-card-foreground">{stats?.pending_leaves || 0}</div>
               <p className="text-xs text-muted-foreground">Awaiting approval</p>
             </CardContent>
           </Card>
 
-          <Card className="stat-card" data-testid="stat-present-today">
+          <Card className="stat-card bg-card border-border" data-testid="stat-present-today">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Present Today</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">Present Today</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.present_today || 0}</div>
+              <div className="text-2xl font-bold text-card-foreground">{stats?.present_today || 0}</div>
               <p className="text-xs text-muted-foreground">Attendance today</p>
             </CardContent>
           </Card>
