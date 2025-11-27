@@ -1425,6 +1425,89 @@ async def get_dashboard_stats(current_user: TokenData = Depends(get_current_user
         }
 
 
+# ===== NOTIFICATIONS =====
+async def create_notification(
+    user_id: Optional[str],
+    target_roles: List[str],
+    type: str,
+    title: str,
+    message: str,
+    related_task_id: Optional[str] = None,
+    related_request_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
+):
+    """Helper function to create a notification"""
+    notification = Notification(
+        user_id=user_id,
+        target_roles=target_roles,
+        type=type,
+        title=title,
+        message=message,
+        related_task_id=related_task_id,
+        related_request_id=related_request_id,
+        metadata=metadata
+    )
+    
+    doc = notification.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.notifications.insert_one(doc)
+    return notification
+
+
+@api_router.get("/notifications", response_model=List[Notification])
+async def get_notifications(current_user: TokenData = Depends(get_current_user)):
+    query = {
+        "$or": [
+            {"user_id": current_user.user_id},
+            {"target_roles": current_user.role}
+        ]
+    }
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    
+    for notif in notifications:
+        if isinstance(notif.get('created_at'), str):
+            notif['created_at'] = datetime.fromisoformat(notif['created_at'])
+    
+    return notifications
+
+
+@api_router.patch("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    current_user: TokenData = Depends(get_current_user)
+):
+    # Find notification
+    notif = await db.notifications.find_one({"id": notification_id})
+    if not notif:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+    
+    # Check access
+    if notif.get("user_id") and notif["user_id"] != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot mark other users' notifications")
+    
+    await db.notifications.update_one(
+        {"id": notification_id},
+        {"$set": {"is_read": True}}
+    )
+    
+    return {"message": "Marked as read"}
+
+
+@api_router.patch("/notifications/mark-all-read")
+async def mark_all_notifications_read(current_user: TokenData = Depends(get_current_user)):
+    query = {
+        "$or": [
+            {"user_id": current_user.user_id},
+            {"target_roles": current_user.role}
+        ]
+    }
+    
+    await db.notifications.update_many(query, {"$set": {"is_read": True}})
+    
+    return {"message": "All notifications marked as read"}
+
+
 # Mount API router
 app.include_router(api_router)
 
