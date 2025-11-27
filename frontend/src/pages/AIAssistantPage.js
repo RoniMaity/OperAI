@@ -6,13 +6,14 @@ import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import api from '../services/api';
 import { toast } from 'sonner';
-import { Send, Bot, User, Zap, CheckCircle, XCircle, Activity, List } from 'lucide-react';
+import { Send, Bot, User, Zap, CheckCircle, XCircle, Activity, RefreshCw, Plus } from 'lucide-react';
 
 export default function AIAssistantPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState(() => `session_${Date.now()}`);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [sessionId, setSessionId] = useState(() => `session_${Date.now()}`);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -22,6 +23,50 @@ export default function AIAssistantPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    loadChatHistory();
+  }, [sessionId]);
+
+  const loadChatHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      const response = await api.get('/ai/history', {
+        params: { session_id: sessionId }
+      });
+      
+      if (response.data && response.data.length > 0) {
+        // Convert stored messages to UI format
+        const loadedMessages = response.data.flatMap(msg => {
+          const msgs = [];
+          // User message
+          msgs.push({
+            role: 'user',
+            content: msg.message
+          });
+          // Assistant message
+          msgs.push({
+            role: 'assistant',
+            content: msg.response,
+            actions: msg.actions_executed || []
+          });
+          return msgs;
+        });
+        setMessages(loadedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const startNewChat = () => {
+    const newSessionId = `session_${Date.now()}`;
+    setSessionId(newSessionId);
+    setMessages([]);
+    toast.success('New chat started');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,8 +86,8 @@ export default function AIAssistantPage() {
       
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response.data.response || response.data.message || response.data.explanation || 'AI response received',
-        actions: response.data.actions_executed || response.data.actionsExecuted || response.data.actions || [],
+        content: response.data.message || response.data.response || response.data.explanation || 'AI response received',
+        actions: response.data.actionsExecuted || response.data.actions_executed || response.data.actions || [],
         thought: response.data.thought
       }]);
     } catch (error) {
@@ -152,14 +197,30 @@ export default function AIAssistantPage() {
     );
   };
 
+  if (historyLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6" data-testid="ai-assistant-page">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground" data-testid="ai-assistant-title">
-            OperAI Intelligence
-          </h1>
-          <p className="text-muted-foreground">Operational AI Engine — Execute workforce actions through natural language</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground" data-testid="ai-assistant-title">
+              OperAI Intelligence
+            </h1>
+            <p className="text-muted-foreground">Operational AI Engine — Execute workforce actions through natural language</p>
+          </div>
+          <Button onClick={startNewChat} variant="outline">
+            <Plus className="h-4 w-4 mr-2" />
+            New Chat
+          </Button>
         </div>
 
         <Card className="h-[600px] flex flex-col bg-card border-border shadow-lg" data-testid="chat-card">
@@ -182,36 +243,34 @@ export default function AIAssistantPage() {
                   <div>
                     <p className="text-lg font-semibold text-foreground">OperAI Intelligence System</p>
                     <p className="text-sm text-muted-foreground mt-1">AI-powered operational agent for workforce automation</p>
+                    <p className="text-xs text-muted-foreground mt-2 italic">Understands casual language and Hindi-English mix!</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm text-left">
                     <div className="bg-muted/50 p-3 rounded-lg">
                       <p className="font-semibold text-foreground mb-2">Task Management</p>
-                      <p className="text-xs text-muted-foreground">• Create & assign tasks</p>
-                      <p className="text-xs text-muted-foreground">• Update task status</p>
-                      <p className="text-xs text-muted-foreground">• List & filter tasks</p>
+                      <p className="text-xs text-muted-foreground">• "Show my tasks"</p>
+                      <p className="text-xs text-muted-foreground">• "Create task for Alice"</p>
+                      <p className="text-xs text-muted-foreground">• "Update task status"</p>
                     </div>
                     <div className="bg-muted/50 p-3 rounded-lg">
                       <p className="font-semibold text-foreground mb-2">Leave Management</p>
-                      <p className="text-xs text-muted-foreground">• Apply for leave</p>
-                      <p className="text-xs text-muted-foreground">• Approve/reject requests</p>
-                      <p className="text-xs text-muted-foreground">• List pending leaves</p>
+                      <p className="text-xs text-muted-foreground">• "kal ka leave laga do"</p>
+                      <p className="text-xs text-muted-foreground">• "Apply sick leave tomorrow"</p>
+                      <p className="text-xs text-muted-foreground">• "List pending leaves"</p>
                     </div>
                     <div className="bg-muted/50 p-3 rounded-lg">
                       <p className="font-semibold text-foreground mb-2">Attendance</p>
-                      <p className="text-xs text-muted-foreground">• Mark attendance</p>
-                      <p className="text-xs text-muted-foreground">• Update work mode</p>
-                      <p className="text-xs text-muted-foreground">• Track presence</p>
+                      <p className="text-xs text-muted-foreground">• "aaj WFH mark kar do"</p>
+                      <p className="text-xs text-muted-foreground">• "Mark attendance WFO"</p>
+                      <p className="text-xs text-muted-foreground">• "Check my attendance"</p>
                     </div>
                     <div className="bg-muted/50 p-3 rounded-lg">
                       <p className="font-semibold text-foreground mb-2">Reports</p>
-                      <p className="text-xs text-muted-foreground">• Team summaries</p>
-                      <p className="text-xs text-muted-foreground">• Employee reports</p>
-                      <p className="text-xs text-muted-foreground">• Performance data</p>
+                      <p className="text-xs text-muted-foreground">• "Team summary"</p>
+                      <p className="text-xs text-muted-foreground">• "Employee report"</p>
+                      <p className="text-xs text-muted-foreground">• "Performance data"</p>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground italic mt-3">
-                    Example: "Create a task to review docs by Friday" or "Apply sick leave for tomorrow"
-                  </p>
                 </div>
               </div>
             ) : (
@@ -263,7 +322,7 @@ export default function AIAssistantPage() {
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Command OperAI... (e.g., 'Create task', 'Apply leave tomorrow', 'Mark attendance WFH', 'List my tasks')"
+                placeholder="Command OperAI... (e.g., 'kal ka leave laga do', 'show my tasks', 'aaj WFH mark kar do')"
                 className="min-h-[60px] resize-none bg-background border-input text-foreground placeholder:text-muted-foreground"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
