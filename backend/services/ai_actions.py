@@ -141,29 +141,80 @@ class AIActionExecutor:
     async def _reassign_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Reassign task to another user"""
         if self.user_role not in ["admin", "hr", "team_lead"]:
-            return {"success": False, "error": "Insufficient permissions to reassign tasks"}
+            return {"success": False, "action": "reassign_task", "error": "Only HR/Team Lead can reassign tasks"}
         
         task_id = params.get("task_id")
-        new_assignee = params.get("new_assignee")
+        new_assignee_email = params.get("new_assignee_email")
+        new_assignee_id = params.get("new_assignee_id")
+        
+        if not task_id:
+            return {"success": False, "action": "reassign_task", "error": "task_id required"}
         
         task = await self.db.tasks.find_one({"id": task_id})
         if not task:
-            return {"success": False, "error": "Task not found"}
+            return {"success": False, "action": "reassign_task", "error": "Task not found"}
+        
+        # Find new assignee
+        if new_assignee_email:
+            new_user = await self.db.users.find_one({"email": new_assignee_email})
+            if new_user:
+                new_assignee_id = new_user["id"]
+        
+        if not new_assignee_id:
+            return {"success": False, "action": "reassign_task", "error": "New assignee not found"}
         
         await self.db.tasks.update_one(
             {"id": task_id},
             {"$set": {
-                "assigned_to": new_assignee,
+                "assigned_to": new_assignee_id,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
+        
+        new_user = await self.db.users.find_one({"id": new_assignee_id})
         
         return {
             "success": True,
             "action": "reassign_task",
             "details": {
                 "task_id": task_id,
-                "new_assignee": new_assignee
+                "task_title": task.get("title"),
+                "new_assignee": new_user.get("name") if new_user else new_assignee_id
+            }
+        }
+    
+    async def _list_user_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """List tasks for current user or specified user"""
+        user_id = params.get("user_id", self.user_id)
+        status_filter = params.get("status")
+        
+        # Permission check
+        if user_id != self.user_id and self.user_role not in ["admin", "hr", "team_lead"]:
+            return {"success": False, "action": "list_user_tasks", "error": "Cannot view other users' tasks"}
+        
+        query = {"assigned_to": user_id}
+        if status_filter:
+            query["status"] = status_filter
+        
+        tasks = await self.db.tasks.find(query).to_list(100)
+        
+        task_summaries = []
+        for task in tasks:
+            task_summaries.append({
+                "id": task["id"],
+                "title": task["title"],
+                "status": task["status"],
+                "priority": task["priority"],
+                "progress": task.get("progress", 0),
+                "deadline": task.get("deadline")
+            })
+        
+        return {
+            "success": True,
+            "action": "list_user_tasks",
+            "details": {
+                "count": len(task_summaries),
+                "tasks": task_summaries
             }
         }
     
