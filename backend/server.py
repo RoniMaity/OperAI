@@ -1271,14 +1271,97 @@ IMPORTANT LANGUAGE UNDERSTANDING:
 - Map casual requests to the appropriate actions
 - Be flexible and interpret intent, not just literal words
 
+CRITICAL MAPPING RULES:
+
+For TASK queries:
+- "show my tasks", "mera task dikhao", "what are my tasks", "list my tasks" → list_user_tasks with NO params
+- "show my pending tasks", "pending tasks kya hain" → list_user_tasks with status="todo"
+- "show active tasks", "active tasks dikhao" → list_user_tasks with status="in_progress"
+- "summarize my tasks", "task ka summary do" → summarize_tasks with NO params
+- "show my work", "what should I do" → summarize_tasks
+
+For ATTENDANCE queries:
+- "check my attendance", "aaj ki attendance dikhao", "attendance status", "past week attendance" → get_attendance_summary
+- "mark attendance", "check in", "aaj WFH mark karo" → mark_attendance
+- "update work mode", "change to WFH" → update_work_mode
+
+For LEAVE queries:
+- "kal ka leave laga do", "apply leave for tomorrow" → apply_leave
+- "leave ke liye request karo" → apply_leave
+
+EXAMPLES:
+
+Input: "Show my pending tasks"
+Output:
+{{
+  "thought": "User wants to see their todo tasks",
+  "actions": [
+    {{
+      "name": "list_user_tasks",
+      "params": {{"status": "todo"}}
+    }}
+  ]
+}}
+
+Input: "Summarize my work"
+Output:
+{{
+  "thought": "User wants a summary of their tasks with urgent items highlighted",
+  "actions": [
+    {{
+      "name": "summarize_tasks",
+      "params": {{}}
+    }}
+  ]
+}}
+
+Input: "check my attendance"
+Output:
+{{
+  "thought": "User wants to see their attendance summary",
+  "actions": [
+    {{
+      "name": "get_attendance_summary",
+      "params": {{}}
+    }}
+  ]
+}}
+
+Input: "aaj ki attendance dikhao"
+Output:
+{{
+  "thought": "User asking for today's attendance in Hindi-English",
+  "actions": [
+    {{
+      "name": "get_attendance_summary",
+      "params": {{}}
+    }}
+  ]
+}}
+
+Input: "kal ka leave laga do"
+Output:
+{{
+  "thought": "User wants to apply leave for tomorrow",
+  "actions": [
+    {{
+      "name": "apply_leave",
+      "params": {{
+        "start_date": "{tomorrow.strftime('%Y-%m-%d')}",
+        "end_date": "{tomorrow.strftime('%Y-%m-%d')}",
+        "leave_type": "casual",
+        "reason": "Personal"
+      }}
+    }}
+  ]
+}}
+
 GUIDELINES:
 - When user mentions an email address for task assignment, use the "assigned_to_email" parameter
-- When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter
+- When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter (defaults to current user)
 - For date-based queries, use the dates provided in CURRENT CONTEXT
 - Interpret "kal" as tomorrow, "aaj" as today
-- "leave laga do" means apply_leave
-- "deadline badha do" means they want to request deadline extension (but employees can't change directly, they need to request)
-- "WFH mark kar do" / "attendance mark karo" means mark_attendance
+- ALWAYS use get_attendance_summary for attendance check queries (not mark_attendance)
 
 OUTPUT FORMAT - CRITICAL:
 Return ONLY a JSON object with these keys:
