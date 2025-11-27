@@ -996,6 +996,16 @@ async def create_announcement(
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.announcements.insert_one(doc)
+    
+    # Create notification for announcement
+    await create_notification(
+        user_id=None,
+        target_roles=announcement.target_roles if announcement.target_roles else [],
+        type="announcement",
+        title=announcement.title,
+        message=announcement.content[:200] + "..." if len(announcement.content) > 200 else announcement.content
+    )
+    
     return announcement
 
 
