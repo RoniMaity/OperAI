@@ -695,6 +695,7 @@ def get_action_definitions() -> List[Dict[str, Any]]:
                 "title": "Task title (required)",
                 "description": "Task description (optional)",
                 "assigned_to": "User ID to assign (optional, defaults to self)",
+                "assigned_to_email": "User email to assign (optional, alternative to assigned_to)",
                 "priority": "low/medium/high/urgent (optional, default: medium)",
                 "deadline": "Deadline YYYY-MM-DD (optional)"
             },
