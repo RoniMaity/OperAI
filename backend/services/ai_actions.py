@@ -457,15 +457,20 @@ class AIActionExecutor:
     async def _create_announcement(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create announcement"""
         if self.user_role not in ["admin", "hr"]:
-            return {"success": False, "error": "Insufficient permissions to create announcements"}
+            return {"success": False, "action": "create_announcement", "error": "Only HR/Admin can create announcements"}
         
-        import uuid
+        title = params.get("title")
+        content = params.get("content")
+        
+        if not title or not content:
+            return {"success": False, "action": "create_announcement", "error": "title and content required"}
+        
         announcement_id = str(uuid.uuid4())
         
         announcement = {
             "id": announcement_id,
-            "title": params.get("title"),
-            "content": params.get("content"),
+            "title": title,
+            "content": content,
             "created_by": self.user_id,
             "target_roles": params.get("target_roles", []),
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -478,8 +483,37 @@ class AIActionExecutor:
             "action": "create_announcement",
             "details": {
                 "announcement_id": announcement_id,
-                "title": params.get("title"),
-                "target_roles": params.get("target_roles", [])
+                "title": title,
+                "target_audience": "All employees" if not params.get("target_roles") else ", ".join(params.get("target_roles"))
+            }
+        }
+    
+    async def _list_team_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """List all tasks for the team (Team Lead only)"""
+        if self.user_role not in ["admin", "hr", "team_lead"]:
+            return {"success": False, "action": "list_team_tasks", "error": "Only Team Leads can view team tasks"}
+        
+        # Get all tasks created by this team lead
+        tasks = await self.db.tasks.find({"created_by": self.user_id}).to_list(100)
+        
+        task_summaries = []
+        for task in tasks:
+            assignee = await self.db.users.find_one({"id": task["assigned_to"]})
+            task_summaries.append({
+                "task_id": task["id"],
+                "title": task["title"],
+                "assignee": assignee.get("name") if assignee else task["assigned_to"],
+                "status": task["status"],
+                "priority": task["priority"],
+                "progress": task.get("progress", 0)
+            })
+        
+        return {
+            "success": True,
+            "action": "list_team_tasks",
+            "details": {
+                "count": len(task_summaries),
+                "tasks": task_summaries
             }
         }
     
