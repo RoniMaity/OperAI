@@ -1506,6 +1506,7 @@ async def create_notification(
 
 @api_router.get("/notifications", response_model=List[Notification])
 async def get_notifications(current_user: TokenData = Depends(get_current_user)):
+    # BUGFIX: Added {"target_roles": {"$size": 0}} to include company-wide announcements (empty target_roles)
     query = {
         "$or": [
             {"user_id": current_user.user_id},
