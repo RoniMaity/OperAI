@@ -933,5 +933,17 @@ def get_action_definitions() -> List[Dict[str, Any]]:
                 "intern_email": "Intern email (required)"
             },
             "permissions": ["admin", "hr"]
+        },
+        {
+            "name": "summarize_tasks",
+            "description": "Summarize current user's tasks with counts by status and top 5 urgent tasks",
+            "parameters": {},
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+        },
+        {
+            "name": "summarize_notifications",
+            "description": "Summarize recent notifications for current user with counts by type and unread items",
+            "parameters": {},
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         }
     ]
