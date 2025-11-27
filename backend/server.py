@@ -546,7 +546,7 @@ async def create_task(
     return task
 
 
-@api_router.get("/tasks", response_model=List[Task])
+@api_router.get("/tasks")
 async def get_tasks(
     status: Optional[str] = None,
     priority: Optional[str] = None,
@@ -556,21 +556,33 @@ async def get_tasks(
 ):
     query = {}
     
-    # Access control
+    # Access control with hierarchy: admin > hr > team_lead > employee > intern
     if current_user.role in [UserRole.ADMIN, UserRole.HR]:
-        # Can see all tasks
+        # Admin/HR: Can see all tasks
         if assigned_to:
             query["assigned_to"] = assigned_to
         if created_by:
             query["created_by"] = created_by
     elif current_user.role == UserRole.TEAM_LEAD:
-        # Can see tasks they created or tasks assigned to them
+        # Team Lead: Can see tasks they created + tasks assigned to their subordinates
+        # Get current user's department
+        current_user_doc = await db.users.find_one({"id": current_user.user_id})
+        department_id = current_user_doc.get("department_id") if current_user_doc else None
+        
+        # Find subordinate user IDs (employees/interns in same department)
+        subordinate_query = {"role": {"$in": ["employee", "intern"]}}
+        if department_id:
+            subordinate_query["department_id"] = department_id
+        subordinates = await db.users.find(subordinate_query).to_list(1000)
+        subordinate_ids = [user["id"] for user in subordinates]
+        
+        # Query: tasks created by them OR tasks assigned to subordinates
         query["$or"] = [
             {"created_by": current_user.user_id},
-            {"assigned_to": current_user.user_id}
+            {"assigned_to": {"$in": subordinate_ids + [current_user.user_id]}}
         ]
     else:
-        # Can only see their own tasks
+        # Employee/Intern: Can only see their own tasks
         query["assigned_to"] = current_user.user_id
     
     # Filters
@@ -581,15 +593,46 @@ async def get_tasks(
     
     tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
+    # Get all unique user IDs for enrichment
+    all_user_ids = list(set(
+        [task.get("assigned_to") for task in tasks if task.get("assigned_to")] +
+        [task.get("created_by") for task in tasks if task.get("created_by")]
+    ))
+    
+    # Fetch user info in bulk
+    users = await db.users.find({"id": {"$in": all_user_ids}}).to_list(1000)
+    user_map = {
+        user["id"]: {
+            "name": user.get("name", "Unknown"),
+            "email": user.get("email", "unknown@operai.demo"),
+            "role": user.get("role", "employee")
+        }
+        for user in users
+    }
+    
+    # Enrich tasks with user information
+    enriched_tasks = []
     for task in tasks:
+        # Convert datetime strings
         if isinstance(task.get('created_at'), str):
             task['created_at'] = datetime.fromisoformat(task['created_at'])
         if isinstance(task.get('updated_at'), str):
             task['updated_at'] = datetime.fromisoformat(task['updated_at'])
         if isinstance(task.get('deadline'), str):
             task['deadline'] = datetime.fromisoformat(task['deadline'])
+        
+        # Add user info
+        assigned_to_info = user_map.get(task.get("assigned_to"), {"name": "Unknown", "email": "", "role": ""})
+        created_by_info = user_map.get(task.get("created_by"), {"name": "Unknown", "email": "", "role": ""})
+        
+        task["assigned_to_name"] = assigned_to_info["name"]
+        task["assigned_to_email"] = assigned_to_info["email"]
+        task["created_by_name"] = created_by_info["name"]
+        task["created_by_email"] = created_by_info["email"]
+        
+        enriched_tasks.append(task)
     
-    return tasks
+    return enriched_tasks
 
 
 @api_router.get("/tasks/{task_id}", response_model=Task)
