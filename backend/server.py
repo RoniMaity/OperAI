@@ -293,6 +293,21 @@ class DeadlineRequestUpdate(BaseModel):
     response_note: Optional[str] = None
 
 
+class Notification(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: Optional[str] = None  # for user-specific notifications
+    target_roles: List[str] = []  # for role-based broadcast
+    type: str  # "announcement" | "deadline_change" | "deadline_request_update"
+    title: str
+    message: str
+    related_task_id: Optional[str] = None
+    related_request_id: Optional[str] = None
+    is_read: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: Optional[Dict[str, Any]] = None
+
+
 # ===== HELPER FUNCTIONS =====
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
