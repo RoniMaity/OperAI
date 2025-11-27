@@ -52,8 +52,8 @@ export default function DashboardLayout({ children }) {
         { name: 'Dashboard', icon: LayoutDashboard, path: '/hr-dashboard' },
         { name: 'Employees', icon: Users, path: '/employees' },
         { name: 'Tasks', icon: CheckSquare, path: '/tasks' },
+        { name: 'Leaves', icon: FileText, path: '/leaves' },
         { name: 'Attendance', icon: Calendar, path: '/attendance' },
-        { name: 'Leave', icon: FileText, path: '/leave' },
         { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
         { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
       ];
