@@ -517,56 +517,137 @@ class AIActionExecutor:
             }
         }
     
-    async def _generate_report(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate report"""
-        report_type = params.get("report_type", "summary")
+    async def _generate_team_summary(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate team summary (Team Lead only)"""
+        if self.user_role not in ["admin", "hr", "team_lead"]:
+            return {"success": False, "action": "generate_team_summary", "error": "Only Team Leads can generate team summaries"}
         
-        if report_type == "tasks":
-            tasks = await self.db.tasks.find({"assigned_to": self.user_id}).to_list(1000)
-            total = len(tasks)
-            completed = len([t for t in tasks if t["status"] == "completed"])
-            pending = len([t for t in tasks if t["status"] in ["todo", "in_progress"]])
-            
-            return {
-                "success": True,
-                "action": "generate_report",
-                "details": {
-                    "report_type": "tasks",
-                    "total_tasks": total,
-                    "completed": completed,
-                    "pending": pending
-                }
-            }
+        # Get team tasks
+        tasks = await self.db.tasks.find({"created_by": self.user_id}).to_list(1000)
         
-        elif report_type == "attendance":
-            from datetime import timedelta
-            end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-            start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
-            
-            records = await self.db.attendance.find({
-                "user_id": self.user_id,
-                "date": {"$gte": start_date, "$lte": end_date}
-            }).to_list(1000)
-            
-            present_days = len([r for r in records if r["status"] in ["present", "wfh"]])
-            
-            return {
-                "success": True,
-                "action": "generate_report",
-                "details": {
-                    "report_type": "attendance",
-                    "period": "last_30_days",
-                    "present_days": present_days,
-                    "total_days": 30
-                }
-            }
+        total_tasks = len(tasks)
+        completed = len([t for t in tasks if t["status"] == "completed"])
+        in_progress = len([t for t in tasks if t["status"] == "in_progress"])
+        pending = len([t for t in tasks if t["status"] == "todo"])
+        blocked = len([t for t in tasks if t["status"] == "blocked"])
         
         return {
             "success": True,
-            "action": "generate_report",
+            "action": "generate_team_summary",
             "details": {
-                "report_type": report_type,
-                "message": "Report generated successfully"
+                "total_tasks": total_tasks,
+                "completed": completed,
+                "in_progress": in_progress,
+                "pending": pending,
+                "blocked": blocked,
+                "completion_rate": f"{(completed/total_tasks*100):.1f}%" if total_tasks > 0 else "0%"
+            }
+        }
+    
+    async def _generate_employee_report(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate employee report (HR only)"""
+        if self.user_role not in ["admin", "hr"]:
+            return {"success": False, "action": "generate_employee_report", "error": "Only HR can generate employee reports"}
+        
+        employee_email = params.get("employee_email")
+        if not employee_email:
+            return {"success": False, "action": "generate_employee_report", "error": "employee_email required"}
+        
+        employee = await self.db.users.find_one({"email": employee_email})
+        if not employee:
+            return {"success": False, "action": "generate_employee_report", "error": "Employee not found"}
+        
+        employee_id = employee["id"]
+        
+        # Get tasks
+        tasks = await self.db.tasks.find({"assigned_to": employee_id}).to_list(1000)
+        total_tasks = len(tasks)
+        completed_tasks = len([t for t in tasks if t["status"] == "completed"])
+        
+        # Get attendance (last 30 days)
+        end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
+        attendance = await self.db.attendance.find({
+            "user_id": employee_id,
+            "date": {"$gte": start_date, "$lte": end_date}
+        }).to_list(100)
+        
+        present_days = len([a for a in attendance if a["status"] in ["present", "wfh"]])
+        
+        # Get leaves
+        leaves = await self.db.leaves.find({"user_id": employee_id}).to_list(100)
+        total_leaves = len(leaves)
+        
+        return {
+            "success": True,
+            "action": "generate_employee_report",
+            "details": {
+                "employee": employee.get("name"),
+                "email": employee_email,
+                "role": employee.get("role"),
+                "tasks": {
+                    "total": total_tasks,
+                    "completed": completed_tasks,
+                    "completion_rate": f"{(completed_tasks/total_tasks*100):.1f}%" if total_tasks > 0 else "0%"
+                },
+                "attendance": {
+                    "present_days": present_days,
+                    "period": "last_30_days",
+                    "attendance_rate": f"{(present_days/30*100):.1f}%"
+                },
+                "leaves": {
+                    "total_requests": total_leaves
+                }
+            }
+        }
+    
+    async def _generate_intern_evaluation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate intern evaluation (HR only)"""
+        if self.user_role not in ["admin", "hr"]:
+            return {"success": False, "action": "generate_intern_evaluation", "error": "Only HR can generate intern evaluations"}
+        
+        intern_email = params.get("intern_email")
+        if not intern_email:
+            return {"success": False, "action": "generate_intern_evaluation", "error": "intern_email required"}
+        
+        intern = await self.db.users.find_one({"email": intern_email, "role": "intern"})
+        if not intern:
+            return {"success": False, "action": "generate_intern_evaluation", "error": "Intern not found"}
+        
+        intern_id = intern["id"]
+        
+        # Get tasks
+        tasks = await self.db.tasks.find({"assigned_to": intern_id}).to_list(1000)
+        total_tasks = len(tasks)
+        completed_tasks = len([t for t in tasks if t["status"] == "completed"])
+        avg_progress = sum([t.get("progress", 0) for t in tasks]) / total_tasks if total_tasks > 0 else 0
+        
+        # Get attendance
+        attendance = await self.db.attendance.find({"user_id": intern_id}).to_list(1000)
+        total_days = len(attendance)
+        present_days = len([a for a in attendance if a["status"] in ["present", "wfh"]])
+        
+        # Simple evaluation
+        performance_score = (completed_tasks / total_tasks * 50 + avg_progress * 0.3 + present_days / total_days * 20) if total_tasks > 0 and total_days > 0 else 0
+        
+        return {
+            "success": True,
+            "action": "generate_intern_evaluation",
+            "details": {
+                "intern": intern.get("name"),
+                "email": intern_email,
+                "tasks": {
+                    "total": total_tasks,
+                    "completed": completed_tasks,
+                    "avg_progress": f"{avg_progress:.1f}%"
+                },
+                "attendance": {
+                    "total_days": total_days,
+                    "present_days": present_days,
+                    "rate": f"{(present_days/total_days*100):.1f}%" if total_days > 0 else "0%"
+                },
+                "performance_score": f"{performance_score:.1f}/100",
+                "recommendation": "Good performance" if performance_score > 70 else "Needs improvement"
             }
         }
 
