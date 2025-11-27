@@ -811,9 +811,18 @@ async def ai_chat(
     current_user: TokenData = Depends(get_current_user)
 ):
     try:
+        # Check if EMERGENT_LLM_KEY is available
+        llm_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not llm_key:
+            return {
+                "response": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
+                "session_id": ai_request.session_id,
+                "error": "EMERGENT_LLM_KEY not configured"
+            }
+        
         # Initialize AI chat
         chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
+            api_key=llm_key,
             session_id=ai_request.session_id,
             system_message="You are a helpful AI assistant for WorkforceOS. Help users with task explanations, report generation, announcement rewriting, and general workforce management queries. Be concise and professional."
         )
@@ -842,7 +851,13 @@ async def ai_chat(
     
     except Exception as e:
         logger.error(f"AI chat error: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI service error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "response": "I'm experiencing technical difficulties. Please try again later.",
+            "session_id": ai_request.session_id,
+            "error": str(e)
+        }
 
 
 @api_router.post("/ai/execute")
