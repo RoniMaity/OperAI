@@ -44,6 +44,7 @@ export default function DashboardLayout({ children }) {
       { name: 'Tasks', icon: CheckSquare, path: '/tasks' },
       { name: 'Attendance', icon: Calendar, path: '/attendance' },
       { name: 'Leave', icon: FileText, path: '/leave' },
+      { name: 'Notifications', icon: Bell, path: '/notifications' },
       { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
       { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
     ];
