@@ -205,12 +205,84 @@ OperAI includes an AI assistant powered by Gemini 2.5 Flash that understands:
 
 ## 🧪 Testing
 
-### Backend QA
+### Automated Test Suite
+
+OperAI includes a comprehensive pytest-based test suite covering critical backend flows.
+
+#### Running Tests
+
+```bash
+cd /app/backend
+pytest
+```
+
+#### Run Specific Test Files
+
+```bash
+# Test authentication only
+pytest tests/test_auth.py
+
+# Test tasks only
+pytest tests/test_tasks.py
+
+# Test with verbose output
+pytest -v
+
+# Test with coverage report
+pytest --cov=. --cov-report=html
+```
+
+#### Test Coverage
+
+The test suite covers:
+- ✅ **Authentication**: Registration, login, JWT tokens, /auth/me
+- ✅ **Tasks**: CRUD operations, role-based access, status updates
+- ✅ **Attendance**: Check-in/out, once-per-day enforcement, work modes
+- ✅ **Leaves**: Application, approval/rejection, status changes
+- ✅ **AI**: Mocked LLM calls, action execution, response validation
+
+**Total Tests**: 50+ test cases  
+**Test Database**: Uses `workforceos_test_db` (auto-cleaned per test)
+
+#### Test Structure
+
+```
+/app/backend/tests/
+├── conftest.py           # Fixtures and setup
+├── test_auth.py          # Authentication tests
+├── test_tasks.py         # Task management tests
+├── test_attendance.py    # Attendance tests
+├── test_leaves.py        # Leave management tests
+└── test_ai.py            # AI assistant tests (mocked)
+```
+
+#### Key Features
+
+- **Isolated Tests**: Each test runs with a clean database
+- **Async Support**: Full async/await support via pytest-asyncio
+- **Mocked AI**: AI tests use mocked LLM to avoid external API calls
+- **Role-Based**: Tests validate RBAC for all user roles
+- **Fast Execution**: Complete suite runs in ~10-15 seconds
+
+#### Test Fixtures
+
+Common fixtures available for all tests:
+- `client` - Async HTTP client for API testing
+- `admin_token` - Admin user authentication
+- `hr_token` - HR user authentication
+- `team_lead_token` - Team lead user authentication
+- `employee_token` - Employee user authentication
+- `intern_token` - Intern user authentication
+- `test_db` - Clean MongoDB test database
+
+### Manual QA
+
 Comprehensive backend testing has been completed with 100% success rate.
 
 See `/app/QA_SESSION_SUMMARY.md` for detailed test results.
 
 ### Test Credentials
+
 Use the demo accounts listed above for testing all features.
 
 ## 📝 Development Notes
