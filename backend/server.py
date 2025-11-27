@@ -936,9 +936,19 @@ IMPORTANT:
 - Be specific and helpful in your response
 """
         
+        # Check if EMERGENT_LLM_KEY is available
+        llm_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not llm_key:
+            return {
+                "response": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
+                "thought": "AI service unavailable",
+                "actions_executed": [],
+                "session_id": ai_request.session_id
+            }
+        
         # Call AI to determine actions
         chat = LlmChat(
-            api_key=os.environ['EMERGENT_LLM_KEY'],
+            api_key=llm_key,
             session_id=ai_request.session_id,
             system_message=system_prompt
         )
