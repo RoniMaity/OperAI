@@ -255,11 +255,26 @@ export default function TasksPage() {
                       className="w-full"
                     />
                   </div>
-                  {task.deadline && (
-                    <p className="text-xs text-muted-foreground">
-                      Deadline: {new Date(task.deadline).toLocaleDateString()}
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between">
+                    {task.deadline ? (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          Deadline: {new Date(task.deadline).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No deadline set</p>
+                    )}
+                    <div className="flex gap-2">
+                      {['admin', 'hr', 'team_lead'].includes(user?.role) && (
+                        <DeadlineEditDialog task={task} onUpdate={fetchTasks} />
+                      )}
+                      {['employee', 'intern'].includes(user?.role) && task.assigned_to === user?.id && (
+                        <DeadlineRequestDialog task={task} onRequest={fetchTasks} />
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             ))}
