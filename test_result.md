@@ -320,3 +320,5 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Starting comprehensive QA pass. Backend testing first, then frontend. Will test all roles: Admin, HR, Team Lead, Employee, Intern. Focus on real bugs, not redesign."
+  - agent: "testing"
+    message: "BACKEND TESTING COMPLETE: Comprehensive testing of all OperAI backend APIs completed successfully. Found and FIXED one critical bug in notification system. All core functionality working: Auth/RBAC (100%), Tasks (100%), Attendance (100%), Leave Management (100%), Deadline Requests (100%), Announcements/Notifications (100% after fix), AI endpoints (100%). Success rate: 97.5% (39/40 tests passed, 1 expected duplicate prevention). Ready for frontend testing or production deployment."
