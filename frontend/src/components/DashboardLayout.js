@@ -24,7 +24,8 @@ import {
   X,
   MessageCircle,
   Briefcase,
-  CalendarClock
+  CalendarClock,
+  Bell
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }) {
