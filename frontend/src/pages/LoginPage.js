@@ -6,12 +6,22 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { toast } from 'sonner';
-import { LogIn, Loader2 } from 'lucide-react';
+import { LogIn, Loader2, User, Users, Shield, Briefcase, GraduationCap } from 'lucide-react';
+
+// Demo accounts for quick access
+const DEMO_ACCOUNTS = [
+  { role: 'Admin', email: 'admin@operai.demo', password: 'Password123!', icon: Shield, color: 'text-purple-600 dark:text-purple-400' },
+  { role: 'HR', email: 'hr@operai.demo', password: 'Password123!', icon: Users, color: 'text-blue-600 dark:text-blue-400' },
+  { role: 'Team Lead', email: 'lead@operai.demo', password: 'Password123!', icon: Briefcase, color: 'text-green-600 dark:text-green-400' },
+  { role: 'Employee', email: 'emp1@operai.demo', password: 'Password123!', icon: User, color: 'text-orange-600 dark:text-orange-400' },
+  { role: 'Intern', email: 'intern@operai.demo', password: 'Password123!', icon: GraduationCap, color: 'text-pink-600 dark:text-pink-400' },
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDemoAccounts, setShowDemoAccounts] = useState(true);
   const { login } = useAuth();
   const navigate = useNavigate();
 
