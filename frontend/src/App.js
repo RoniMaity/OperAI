@@ -12,6 +12,9 @@ import AttendancePage from './pages/AttendancePage';
 import LeavePage from './pages/LeavePage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import AIAssistantPage from './pages/AIAssistantPage';
+import EmployeeListPage from './pages/EmployeeListPage';
+import LeaveListPage from './pages/LeaveListPage';
+import AttendanceListPage from './pages/AttendanceListPage';
 import '@/App.css';
 
 function ProtectedRoute({ children }) {
@@ -68,9 +71,11 @@ function App() {
             <Route path="/dashboard" element={<ProtectedRoute><EmployeeDashboard /></ProtectedRoute>} />
             <Route path="/hr-dashboard" element={<ProtectedRoute><HRDashboard /></ProtectedRoute>} />
             <Route path="/team-dashboard" element={<ProtectedRoute><TeamDashboard /></ProtectedRoute>} />
+            <Route path="/employees" element={<ProtectedRoute><EmployeeListPage /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
             <Route path="/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
             <Route path="/leave" element={<ProtectedRoute><LeavePage /></ProtectedRoute>} />
+            <Route path="/leaves" element={<ProtectedRoute><LeaveListPage /></ProtectedRoute>} />
             <Route path="/announcements" element={<ProtectedRoute><AnnouncementsPage /></ProtectedRoute>} />
             <Route path="/ai-assistant" element={<ProtectedRoute><AIAssistantPage /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />

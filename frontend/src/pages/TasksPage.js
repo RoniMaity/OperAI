@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -20,7 +21,8 @@ export default function TasksPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [editTask, setEditTask] = useState(null);
+  const [searchParams] = useSearchParams();
+  const statusFilter = searchParams.get('status');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -36,11 +38,12 @@ export default function TasksPage() {
     if (canCreateTask) {
       fetchUsers();
     }
-  }, []);
+  }, [statusFilter]);
 
   const fetchTasks = async () => {
     try {
-      const response = await api.get('/tasks');
+      const params = statusFilter ? { status: statusFilter } : {};
+      const response = await api.get('/tasks', { params });
       setTasks(response.data);
     } catch (error) {
       toast.error('Failed to fetch tasks');
@@ -97,7 +100,9 @@ export default function TasksPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight" data-testid="tasks-title">Tasks</h1>
-            <p className="text-muted-foreground">Manage and track your tasks</p>
+            <p className="text-muted-foreground">
+              {statusFilter ? `Showing ${statusFilter.replace('_', ' ')} tasks` : 'Manage and track your tasks'}
+            </p>
           </div>
           {canCreateTask && (
             <Dialog open={open} onOpenChange={setOpen}>
@@ -191,7 +196,7 @@ export default function TasksPage() {
         ) : tasks.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">No tasks yet</p>
+              <p className="text-muted-foreground">No tasks found</p>
             </CardContent>
           </Card>
         ) : (
