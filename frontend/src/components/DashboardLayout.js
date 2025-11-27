@@ -58,6 +58,7 @@ export default function DashboardLayout({ children }) {
         { name: 'Leaves', icon: FileText, path: '/leaves' },
         { name: 'Deadline Requests', icon: CalendarClock, path: '/deadline-requests' },
         { name: 'Attendance', icon: Calendar, path: '/attendance' },
+        { name: 'Notifications', icon: Bell, path: '/notifications' },
         { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
         { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
       ];
@@ -70,6 +71,7 @@ export default function DashboardLayout({ children }) {
         { name: 'Deadline Requests', icon: CalendarClock, path: '/deadline-requests' },
         { name: 'Attendance', icon: Calendar, path: '/attendance' },
         { name: 'Leave', icon: FileText, path: '/leave' },
+        { name: 'Notifications', icon: Bell, path: '/notifications' },
         { name: 'Announcements', icon: MessageCircle, path: '/announcements' },
         { name: 'AI Intelligence', icon: Briefcase, path: '/ai-assistant' },
       ];
