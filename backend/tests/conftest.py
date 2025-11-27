@@ -20,23 +20,14 @@ os.environ['DB_NAME'] = TEST_DB_NAME
 
 
 @pytest.fixture(scope="function")
-def event_loop():
-    """Create an instance of the default event loop for each test."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="function")
 async def test_db():
     """
     Provide a clean test database for each test.
     Clears all collections before and after each test.
     """
     mongo_url = os.environ['MONGO_URL']
-    client = AsyncIOMotorClient(mongo_url)
-    db = client[TEST_DB_NAME]
+    mongo_client = AsyncIOMotorClient(mongo_url)
+    db = mongo_client[TEST_DB_NAME]
     
     # Clear all collections before test
     collections = await db.list_collection_names()
@@ -46,11 +37,14 @@ async def test_db():
     yield db
     
     # Clear all collections after test
-    collections = await db.list_collection_names()
-    for collection in collections:
-        await db[collection].delete_many({})
+    try:
+        collections = await db.list_collection_names()
+        for collection in collections:
+            await db[collection].delete_many({})
+    except:
+        pass  # Ignore cleanup errors
     
-    client.close()
+    mongo_client.close()
 
 
 @pytest.fixture(scope="function")
