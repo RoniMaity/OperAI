@@ -107,135 +107,171 @@ user_problem_statement: "Full end-to-end QA pass for OperAI across all roles (Ad
 backend:
   - task: "Auth - Register and Login"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Need to test registration and login for all roles"
+      - working: true
+        agent: "testing"
+        comment: "Successfully tested registration and login for all 5 roles (admin, hr, team_lead, employee, intern). All users can register and login correctly with proper JWT token generation."
 
   - task: "Auth - /api/auth/me endpoint"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Need to verify correct role and metadata returned"
+      - working: true
+        agent: "testing"
+        comment: "/api/auth/me endpoint working correctly for all roles. Returns proper user data including correct role, email, name, and other metadata."
 
   - task: "RBAC - Route Protection"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Need to test cross-role access prevention"
+      - working: true
+        agent: "testing"
+        comment: "RBAC working correctly. Employee users are properly denied access to HR-only endpoints like /api/users (returns 403 Forbidden as expected)."
 
   - task: "Tasks - CRUD Operations"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test task creation, update, listing for all roles"
+      - working: true
+        agent: "testing"
+        comment: "Task CRUD operations working perfectly. Team Lead can create tasks for employees, employees can see their assigned tasks, update status/progress, and Team Lead can see tasks they created."
 
   - task: "Deadline Requests - Create/Approve/Reject"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test deadline request flow for employees and approval by team leads"
+      - working: true
+        agent: "testing"
+        comment: "Deadline request flow working correctly. Employees can create deadline extension requests, Team Leads can view and approve/reject them. Notifications are properly created upon approval/rejection."
 
   - task: "Attendance - Check-in/Check-out"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test attendance marking and once-per-day enforcement"
+      - working: true
+        agent: "testing"
+        comment: "Attendance system working correctly. Employees can check-in with work mode (WFO/WFH), duplicate check-in prevention works, check-out functionality works, and attendance records are retrievable."
 
   - task: "Leave - Apply/Approve/Reject"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test leave application and approval flow"
+      - working: true
+        agent: "testing"
+        comment: "Leave management working perfectly. Employees can apply for leave, HR can view all leave requests, and HR can approve/reject leave requests with proper status updates."
 
   - task: "Announcements - Create and Notifications"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test announcement creation and notification generation"
+      - working: false
+        agent: "testing"
+        comment: "Found bug in notification query logic for announcements with empty target_roles"
+      - working: true
+        agent: "testing"
+        comment: "FIXED: Updated notification query to handle empty target_roles (all users). HR can create announcements and all employees receive notifications correctly."
 
   - task: "AI - /api/ai/chat endpoint"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test AI chat functionality"
+      - working: true
+        agent: "testing"
+        comment: "AI chat endpoint working correctly. Responds to user messages using Gemini 2.5 Flash model with proper context and conversation history."
 
   - task: "AI - /api/ai/execute endpoint"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test AI action execution with Hindi-English prompts"
+      - working: true
+        agent: "testing"
+        comment: "AI execute endpoint working correctly. Successfully processes Hindi-English mixed prompts like 'kal ka leave laga do', 'aaj WFH mark kar do', 'mujhe tasks dikhao' without 500 errors. Returns valid JSON responses."
 
   - task: "Notifications - Creation and Retrieval"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Test notification system for all notification types"
+      - working: true
+        agent: "testing"
+        comment: "Notification system working correctly. Users can retrieve notifications, mark individual notifications as read, and mark all notifications as read. Notifications are properly created for announcements and deadline request updates."
 
 frontend:
   - task: "Auth UI - Login/Register"
