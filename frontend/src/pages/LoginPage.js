@@ -73,6 +73,56 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Demo Accounts Section */}
+          {showDemoAccounts && (
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                  🎯 Demo Accounts - Quick Access
+                </h3>
+                <button
+                  onClick={() => setShowDemoAccounts(false)}
+                  className="text-xs text-blue-700 dark:text-blue-300 hover:underline"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {DEMO_ACCOUNTS.map((account) => {
+                  const Icon = account.icon;
+                  return (
+                    <button
+                      key={account.email}
+                      onClick={() => handleQuickFill(account)}
+                      className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                      type="button"
+                    >
+                      <Icon className={`h-5 w-5 ${account.color} group-hover:scale-110 transition-transform`} />
+                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {account.role}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-blue-700 dark:text-blue-300 text-center">
+                Click any role to auto-fill credentials • Password: Password123!
+              </p>
+            </div>
+          )}
+
+          {!showDemoAccounts && (
+            <div className="mb-4 text-center">
+              <button
+                onClick={() => setShowDemoAccounts(true)}
+                className="text-sm text-primary hover:underline"
+                type="button"
+              >
+                Show demo accounts
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">Email</Label>
@@ -125,6 +175,16 @@ export default function LoginPage() {
             <Link to="/register" className="text-primary hover:underline font-medium" data-testid="register-link">
               Register
             </Link>
+          </div>
+          
+          <div className="mt-4 p-3 bg-muted/50 rounded-md border border-border">
+            <p className="text-xs text-muted-foreground text-center">
+              💡 <strong>Demo Mode:</strong> Use the quick access buttons above or see{' '}
+              <a href="https://github.com/your-repo" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+                README
+              </a>{' '}
+              for full account list
+            </p>
           </div>
         </CardContent>
       </Card>
