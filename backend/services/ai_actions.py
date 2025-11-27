@@ -220,16 +220,21 @@ class AIActionExecutor:
     
     async def _apply_leave(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Apply for leave"""
-        import uuid
         leave_id = str(uuid.uuid4())
+        
+        start_date = params.get("start_date")
+        end_date = params.get("end_date")
+        
+        if not start_date or not end_date:
+            return {"success": False, "action": "apply_leave", "error": "start_date and end_date required"}
         
         leave = {
             "id": leave_id,
             "user_id": self.user_id,
             "leave_type": params.get("leave_type", "casual"),
-            "start_date": params.get("start_date"),
-            "end_date": params.get("end_date"),
-            "reason": params.get("reason"),
+            "start_date": start_date,
+            "end_date": end_date,
+            "reason": params.get("reason", "Personal"),
             "status": "pending",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
@@ -242,9 +247,41 @@ class AIActionExecutor:
             "action": "apply_leave",
             "details": {
                 "leave_id": leave_id,
-                "start_date": params.get("start_date"),
-                "end_date": params.get("end_date"),
+                "leave_type": params.get("leave_type", "casual"),
+                "start_date": start_date,
+                "end_date": end_date,
                 "status": "pending"
+            }
+        }
+    
+    async def _cancel_leave(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Cancel own pending leave"""
+        leave_id = params.get("leave_id")
+        
+        if not leave_id:
+            return {"success": False, "action": "cancel_leave", "error": "leave_id required"}
+        
+        leave = await self.db.leaves.find_one({"id": leave_id, "user_id": self.user_id})
+        if not leave:
+            return {"success": False, "action": "cancel_leave", "error": "Leave not found or not yours"}
+        
+        if leave["status"] != "pending":
+            return {"success": False, "action": "cancel_leave", "error": f"Cannot cancel {leave['status']} leave"}
+        
+        await self.db.leaves.update_one(
+            {"id": leave_id},
+            {"$set": {
+                "status": "cancelled",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        return {
+            "success": True,
+            "action": "cancel_leave",
+            "details": {
+                "leave_id": leave_id,
+                "status": "cancelled"
             }
         }
     
