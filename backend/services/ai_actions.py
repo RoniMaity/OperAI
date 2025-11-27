@@ -35,6 +35,7 @@ class AIActionExecutor:
             "generate_intern_evaluation": self._generate_intern_evaluation,
             "summarize_tasks": self._summarize_tasks,
             "summarize_notifications": self._summarize_notifications,
+            "get_attendance_summary": self._get_attendance_summary,
         }
     
     async def execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,7 +219,7 @@ class AIActionExecutor:
         user_id = params.get("user_id")
         status_filter = params.get("status")
         
-        # Permission check: non-privileged users can only view their own tasks
+        # Permission check: non-privileged users can ALWAYS see their own tasks
         if self.user_role not in ["admin", "hr", "team_lead"]:
             # Force to current user's tasks regardless of what was requested
             user_id = self.user_id
@@ -231,7 +232,7 @@ class AIActionExecutor:
         if status_filter:
             query["status"] = status_filter
         
-        tasks = await self.db.tasks.find(query).to_list(100)
+        tasks = await self.db.tasks.find(query).sort("created_at", -1).to_list(100)
         
         task_summaries = []
         for task in tasks:
@@ -241,7 +242,8 @@ class AIActionExecutor:
                 "status": task["status"],
                 "priority": task["priority"],
                 "progress": task.get("progress", 0),
-                "deadline": task.get("deadline")
+                "deadline": task.get("deadline"),
+                "description": task.get("description", "")
             })
         
         return {
@@ -686,12 +688,11 @@ class AIActionExecutor:
             }
         }
 
-
     async def _summarize_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Summarize current user's tasks"""
+        """Summarize current user's tasks with urgent task identification"""
         try:
             # Fetch user's tasks
-            tasks = await self.db.tasks.find({"assigned_to": self.user_id}).to_list(100)
+            tasks = await self.db.tasks.find({"assigned_to": self.user_id}).sort("created_at", -1).to_list(100)
             
             # Count by status
             status_counts = {
@@ -706,7 +707,7 @@ class AIActionExecutor:
                 if status in status_counts:
                     status_counts[status] += 1
             
-            # Get urgent tasks (sorted by deadline and priority)
+            # Get urgent tasks (only todo and in_progress)
             urgent_tasks = []
             for task in tasks:
                 if task.get("status") in ["todo", "in_progress"]:
@@ -722,7 +723,9 @@ class AIActionExecutor:
             top_tasks = []
             for task in urgent_tasks[:5]:
                 top_tasks.append({
+                    "id": task["id"],
                     "title": task.get("title"),
+                    "status": task.get("status"),
                     "priority": task.get("priority", "medium"),
                     "deadline": task.get("deadline", "No deadline"),
                     "progress": task.get("progress", 0)
@@ -732,9 +735,9 @@ class AIActionExecutor:
                 "success": True,
                 "action": "summarize_tasks",
                 "details": {
-                    "total_tasks": len(tasks),
+                    "total": len(tasks),
                     "by_status": status_counts,
-                    "top_5_urgent": top_tasks
+                    "urgent_tasks": top_tasks
                 }
             }
         except Exception as e:
@@ -793,6 +796,69 @@ class AIActionExecutor:
                 "error": str(e)
             }
 
+    async def _get_attendance_summary(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Get today's attendance and last 7-day summary for the current user"""
+        try:
+            today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+            
+            # Get today's attendance
+            today_attendance = await self.db.attendance.find_one({
+                "user_id": self.user_id,
+                "date": today
+            })
+            
+            today_data = None
+            if today_attendance:
+                today_data = {
+                    "date": today_attendance.get("date"),
+                    "status": today_attendance.get("status"),
+                    "work_mode": today_attendance.get("work_mode"),
+                    "check_in": today_attendance.get("check_in"),
+                    "check_out": today_attendance.get("check_out")
+                }
+            else:
+                today_data = {
+                    "date": today,
+                    "status": "not_marked",
+                    "work_mode": None,
+                    "check_in": None,
+                    "check_out": None
+                }
+            
+            # Get last 7 days summary
+            seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
+            recent_attendance = await self.db.attendance.find({
+                "user_id": self.user_id,
+                "date": {"$gte": seven_days_ago, "$lte": today}
+            }).to_list(100)
+            
+            total_days = 7
+            present_days = len([a for a in recent_attendance if a.get("status") in ["present", "wfh"]])
+            absent_days = total_days - present_days
+            wfh_days = len([a for a in recent_attendance if a.get("status") == "wfh"])
+            
+            last_7_days_data = {
+                "total_days": total_days,
+                "present_days": present_days,
+                "absent_days": absent_days,
+                "wfh_days": wfh_days
+            }
+            
+            return {
+                "success": True,
+                "action": "get_attendance_summary",
+                "details": {
+                    "today": today_data,
+                    "last_7_days": last_7_days_data
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "action": "get_attendance_summary",
+                "error": str(e)
+            }
+
 
 def get_action_definitions() -> List[Dict[str, Any]]:
     """Return available actions with descriptions"""
@@ -831,11 +897,17 @@ def get_action_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "list_user_tasks",
-            "description": "List tasks for user",
+            "description": "List tasks for current user, optionally filter by status",
             "parameters": {
-                "user_id": "User ID (optional, defaults to self)",
-                "status": "Filter by status (optional)"
+                "user_id": "User ID (optional, defaults to current user)",
+                "status": "Filter by status: todo/in_progress/completed/blocked (optional)"
             },
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+        },
+        {
+            "name": "summarize_tasks",
+            "description": "Summarize current user's tasks with counts by status and highlight top 5 urgent tasks",
+            "parameters": {},
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
@@ -897,6 +969,12 @@ def get_action_definitions() -> List[Dict[str, Any]]:
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
+            "name": "get_attendance_summary",
+            "description": "Get today's attendance and last 7-day summary for the current user",
+            "parameters": {},
+            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+        },
+        {
             "name": "create_announcement",
             "description": "Create company announcement",
             "parameters": {
@@ -933,12 +1011,6 @@ def get_action_definitions() -> List[Dict[str, Any]]:
                 "intern_email": "Intern email (required)"
             },
             "permissions": ["admin", "hr"]
-        },
-        {
-            "name": "summarize_tasks",
-            "description": "Summarize current user's tasks with counts by status and top 5 urgent tasks",
-            "parameters": {},
-            "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
         },
         {
             "name": "summarize_notifications",
