@@ -1412,6 +1412,33 @@ Output:
   ]
 }}
 
+Input: "Show my team members"
+Output:
+{{
+  "thought": "User wants to see their direct reports",
+  "actions": [
+    {{
+      "name": "get_team_members",
+      "params": {{}}
+    }}
+  ]
+}}
+
+Input: "Show pending tasks for lead@operai.demo"
+Output:
+{{
+  "thought": "HR wants to view pending tasks for the team lead",
+  "actions": [
+    {{
+      "name": "list_user_tasks",
+      "params": {{
+        "user_email": "lead@operai.demo",
+        "status": "todo"
+      }}
+    }}
+  ]
+}}
+
 GUIDELINES:
 - When user mentions an email address for task assignment, use the "assigned_to_email" parameter
 - When user asks "show my tasks" or "list my tasks", call list_user_tasks WITHOUT any user_id parameter (defaults to current user)
