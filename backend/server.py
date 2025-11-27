@@ -386,10 +386,22 @@ async def get_me(current_user: TokenData = Depends(get_current_user)):
     return User(**user_doc)
 
 
-# ===== USER MANAGEMENT (HR/Admin only) =====
+# ===== USER MANAGEMENT =====
 @api_router.get("/users", response_model=List[User])
-async def get_users(current_user: TokenData = Depends(require_role(UserRole.ADMIN, UserRole.HR))):
-    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(1000)
+async def get_users(current_user: TokenData = Depends(get_current_user)):
+    # HR/Admin can see all users
+    if current_user.role in [UserRole.ADMIN, UserRole.HR]:
+        users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(1000)
+    # Team Lead can see employees and interns only
+    elif current_user.role == UserRole.TEAM_LEAD:
+        users = await db.users.find(
+            {"role": {"$in": [UserRole.EMPLOYEE, UserRole.INTERN]}},
+            {"_id": 0, "password": 0}
+        ).to_list(1000)
+    else:
+        # Regular employees/interns cannot list users
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    
     for user in users:
         if isinstance(user.get('created_at'), str):
             user['created_at'] = datetime.fromisoformat(user['created_at'])
