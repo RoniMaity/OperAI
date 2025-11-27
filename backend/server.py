@@ -1509,7 +1509,8 @@ async def get_notifications(current_user: TokenData = Depends(get_current_user))
     query = {
         "$or": [
             {"user_id": current_user.user_id},
-            {"target_roles": current_user.role}
+            {"target_roles": current_user.role},
+            {"target_roles": {"$size": 0}}  # Empty target_roles means all users
         ]
     }
     
