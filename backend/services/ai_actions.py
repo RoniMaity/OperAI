@@ -288,13 +288,19 @@ class AIActionExecutor:
     async def _approve_leave(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Approve leave request"""
         if self.user_role not in ["admin", "hr", "team_lead"]:
-            return {"success": False, "error": "Insufficient permissions to approve leave"}
+            return {"success": False, "action": "approve_leave", "error": "Only HR/Team Lead can approve leave"}
         
         leave_id = params.get("leave_id")
         
+        if not leave_id:
+            return {"success": False, "action": "approve_leave", "error": "leave_id required"}
+        
         leave = await self.db.leaves.find_one({"id": leave_id})
         if not leave:
-            return {"success": False, "error": "Leave request not found"}
+            return {"success": False, "action": "approve_leave", "error": "Leave request not found"}
+        
+        if leave["status"] != "pending":
+            return {"success": False, "action": "approve_leave", "error": f"Leave is {leave['status']}, cannot approve"}
         
         await self.db.leaves.update_one(
             {"id": leave_id},
@@ -305,11 +311,15 @@ class AIActionExecutor:
             }}
         )
         
+        user = await self.db.users.find_one({"id": leave["user_id"]})
+        
         return {
             "success": True,
             "action": "approve_leave",
             "details": {
                 "leave_id": leave_id,
+                "user": user.get("name") if user else leave["user_id"],
+                "dates": f"{leave['start_date']} to {leave['end_date']}",
                 "status": "approved"
             }
         }
