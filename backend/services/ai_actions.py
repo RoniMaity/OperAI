@@ -327,14 +327,17 @@ class AIActionExecutor:
     async def _reject_leave(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Reject leave request"""
         if self.user_role not in ["admin", "hr", "team_lead"]:
-            return {"success": False, "error": "Insufficient permissions to reject leave"}
+            return {"success": False, "action": "reject_leave", "error": "Only HR/Team Lead can reject leave"}
         
         leave_id = params.get("leave_id")
         reason = params.get("reason", "Not approved")
         
+        if not leave_id:
+            return {"success": False, "action": "reject_leave", "error": "leave_id required"}
+        
         leave = await self.db.leaves.find_one({"id": leave_id})
         if not leave:
-            return {"success": False, "error": "Leave request not found"}
+            return {"success": False, "action": "reject_leave", "error": "Leave request not found"}
         
         await self.db.leaves.update_one(
             {"id": leave_id},
@@ -346,13 +349,45 @@ class AIActionExecutor:
             }}
         )
         
+        user = await self.db.users.find_one({"id": leave["user_id"]})
+        
         return {
             "success": True,
             "action": "reject_leave",
             "details": {
                 "leave_id": leave_id,
+                "user": user.get("name") if user else leave["user_id"],
                 "status": "rejected",
                 "reason": reason
+            }
+        }
+    
+    async def _list_pending_leaves(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """List all pending leave requests (HR/Team Lead only)"""
+        if self.user_role not in ["admin", "hr", "team_lead"]:
+            return {"success": False, "action": "list_pending_leaves", "error": "Insufficient permissions"}
+        
+        leaves = await self.db.leaves.find({"status": "pending"}).to_list(100)
+        
+        leave_summaries = []
+        for leave in leaves:
+            user = await self.db.users.find_one({"id": leave["user_id"]})
+            leave_summaries.append({
+                "leave_id": leave["id"],
+                "user": user.get("name") if user else leave["user_id"],
+                "user_email": user.get("email") if user else "",
+                "leave_type": leave["leave_type"],
+                "start_date": leave["start_date"],
+                "end_date": leave["end_date"],
+                "reason": leave["reason"]
+            })
+        
+        return {
+            "success": True,
+            "action": "list_pending_leaves",
+            "details": {
+                "count": len(leave_summaries),
+                "leaves": leave_summaries
             }
         }
     
