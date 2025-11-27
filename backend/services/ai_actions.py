@@ -393,12 +393,11 @@ class AIActionExecutor:
     
     async def _mark_attendance(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Mark attendance"""
-        import uuid
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         
         existing = await self.db.attendance.find_one({"user_id": self.user_id, "date": today})
         if existing:
-            return {"success": False, "error": "Already marked attendance for today"}
+            return {"success": False, "action": "mark_attendance", "error": "Already marked attendance for today"}
         
         work_mode = params.get("work_mode", "wfo")
         
@@ -421,7 +420,8 @@ class AIActionExecutor:
             "details": {
                 "date": today,
                 "work_mode": work_mode,
-                "status": attendance["status"]
+                "status": attendance["status"],
+                "check_in": datetime.now(timezone.utc).strftime("%H:%M")
             }
         }
     
