@@ -36,6 +36,7 @@ class AIActionExecutor:
             "summarize_tasks": self._summarize_tasks,
             "summarize_notifications": self._summarize_notifications,
             "get_attendance_summary": self._get_attendance_summary,
+            "get_team_members": self._get_team_members,
         }
     
     async def execute_action(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -52,6 +53,43 @@ class AIActionExecutor:
             traceback.print_exc()
             return {"success": False, "error": str(e), "action": action}
     
+    async def _get_user_map(self, user_ids: List[str]) -> Dict[str, Dict[str, str]]:
+        """Get a map of user_id -> {name, email, role} for enrichment"""
+        if not user_ids:
+            return {}
+        
+        users = await self.db.users.find({"id": {"$in": user_ids}}).to_list(1000)
+        return {
+            user["id"]: {
+                "name": user.get("name", "Unknown"),
+                "email": user.get("email", "unknown@operai.demo"),
+                "role": user.get("role", "employee")
+            }
+            for user in users
+        }
+    
+    async def _get_subordinate_user_ids(self) -> List[str]:
+        """Get user IDs of subordinates (for team lead)"""
+        if self.user_role != "team_lead":
+            return []
+        
+        # Get current user's department
+        current_user = await self.db.users.find_one({"id": self.user_id})
+        if not current_user:
+            return []
+        
+        department_id = current_user.get("department_id")
+        
+        # Find all employees/interns in same department
+        query = {
+            "role": {"$in": ["employee", "intern"]}
+        }
+        if department_id:
+            query["department_id"] = department_id
+        
+        subordinates = await self.db.users.find(query).to_list(1000)
+        return [user["id"] for user in subordinates]
+
     async def _create_task(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new task"""
         if self.user_role not in ["admin", "hr", "team_lead"]:
@@ -100,7 +138,7 @@ class AIActionExecutor:
             "created_by": self.user_id,
             "status": "todo",
             "priority": params.get("priority", "medium"),
-            "progress": 0,  # Always start with 0
+            "progress": 0,
             "deadline": params.get("deadline"),
             "notes": "",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -108,6 +146,9 @@ class AIActionExecutor:
         }
         
         await self.db.tasks.insert_one(task)
+        
+        # Get creator info
+        creator = await self.db.users.find_one({"id": self.user_id})
         
         return {
             "success": True,
@@ -117,6 +158,7 @@ class AIActionExecutor:
                 "title": params.get("title"),
                 "assigned_to": assignee.get("name"),
                 "assigned_to_email": assignee.get("email"),
+                "created_by": creator.get("name") if creator else "You",
                 "priority": params.get("priority", "medium"),
                 "deadline": params.get("deadline")
             }
@@ -140,19 +182,13 @@ class AIActionExecutor:
         
         update_fields = {"updated_at": datetime.now(timezone.utc).isoformat()}
         
-        # Smart progress defaults based on status
         if new_status:
             update_fields["status"] = new_status
-            
-            # If status is changing to in_progress and no progress provided, default to 30
             if new_status == "in_progress" and progress is None and task.get("progress", 0) == 0:
                 update_fields["progress"] = 30
-            
-            # If status is completed, always set progress to 100
             if new_status == "completed":
                 update_fields["progress"] = 100
         
-        # If progress is explicitly provided, use it (clamped to 0-100)
         if progress is not None:
             update_fields["progress"] = min(100, max(0, int(progress)))
         
@@ -185,7 +221,6 @@ class AIActionExecutor:
         if not task:
             return {"success": False, "action": "reassign_task", "error": "Task not found"}
         
-        # Find new assignee
         if new_assignee_email:
             new_user = await self.db.users.find_one({"email": new_assignee_email})
             if new_user:
@@ -215,17 +250,43 @@ class AIActionExecutor:
         }
     
     async def _list_user_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """List tasks for current user or specified user"""
+        """List tasks for current user or specified user with hierarchy visibility"""
         user_id = params.get("user_id")
+        user_email = params.get("user_email") or params.get("employee_email")
         status_filter = params.get("status")
         
-        # Permission check: non-privileged users can ALWAYS see their own tasks
+        # If email provided, look up user_id
+        if user_email and not user_id:
+            target_user = await self.db.users.find_one({"email": user_email})
+            if target_user:
+                user_id = target_user["id"]
+            else:
+                return {
+                    "success": False,
+                    "action": "list_user_tasks",
+                    "error": f"User not found with email: {user_email}"
+                }
+        
+        # RBAC checks
         if self.user_role not in ["admin", "hr", "team_lead"]:
-            # Force to current user's tasks regardless of what was requested
+            # Employee/Intern: Force to own tasks
             user_id = self.user_id
         else:
-            # Privileged users can view specified user or default to self
-            if not user_id:
+            # Admin/HR/Team Lead
+            if user_id and user_id != self.user_id:
+                # They're trying to view someone else's tasks
+                if self.user_role == "team_lead":
+                    # Team lead can only view their subordinates
+                    subordinate_ids = await self._get_subordinate_user_ids()
+                    if user_id not in subordinate_ids:
+                        return {
+                            "success": False,
+                            "action": "list_user_tasks",
+                            "error": "Team leads can only view tasks of their team members"
+                        }
+                # Admin/HR can view anyone
+            else:
+                # Default to self if no user_id specified
                 user_id = self.user_id
         
         query = {"assigned_to": user_id}
@@ -234,8 +295,15 @@ class AIActionExecutor:
         
         tasks = await self.db.tasks.find(query).sort("created_at", -1).to_list(100)
         
+        # Get user info for enrichment
+        all_user_ids = list(set([task["assigned_to"] for task in tasks] + [task["created_by"] for task in tasks]))
+        user_map = await self._get_user_map(all_user_ids)
+        
         task_summaries = []
         for task in tasks:
+            assigned_to_info = user_map.get(task["assigned_to"], {"name": "Unknown", "email": "", "role": ""})
+            created_by_info = user_map.get(task["created_by"], {"name": "Unknown", "email": "", "role": ""})
+            
             task_summaries.append({
                 "id": task["id"],
                 "title": task["title"],
@@ -243,18 +311,112 @@ class AIActionExecutor:
                 "priority": task["priority"],
                 "progress": task.get("progress", 0),
                 "deadline": task.get("deadline"),
-                "description": task.get("description", "")
+                "description": task.get("description", ""),
+                "assigned_to_name": assigned_to_info["name"],
+                "assigned_to_email": assigned_to_info["email"],
+                "created_by_name": created_by_info["name"],
+                "created_by_email": created_by_info["email"]
             })
+        
+        # Get target user name for response
+        target_user = await self.db.users.find_one({"id": user_id})
+        target_name = target_user.get("name") if target_user else "the user"
         
         return {
             "success": True,
             "action": "list_user_tasks",
             "details": {
+                "user": target_name,
                 "count": len(task_summaries),
                 "tasks": task_summaries
             }
         }
     
+    async def _get_team_members(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Get team members under a team lead"""
+        if self.user_role not in ["admin", "hr", "team_lead"]:
+            return {
+                "success": False,
+                "action": "get_team_members",
+                "error": "Only Admin, HR, and Team Leads can view team members"
+            }
+        
+        team_lead_email = params.get("team_lead_email")
+        team_lead_id = None
+        
+        # Determine which team lead we're looking at
+        if team_lead_email:
+            # Admin/HR querying a specific team lead
+            if self.user_role not in ["admin", "hr"]:
+                return {
+                    "success": False,
+                    "action": "get_team_members",
+                    "error": "Only Admin/HR can query other team leads' members"
+                }
+            team_lead_user = await self.db.users.find_one({"email": team_lead_email, "role": "team_lead"})
+            if not team_lead_user:
+                return {
+                    "success": False,
+                    "action": "get_team_members",
+                    "error": f"Team lead not found with email: {team_lead_email}"
+                }
+            team_lead_id = team_lead_user["id"]
+        else:
+            # Team lead querying their own team
+            if self.user_role == "team_lead":
+                team_lead_id = self.user_id
+            else:
+                return {
+                    "success": False,
+                    "action": "get_team_members",
+                    "error": "Please specify team_lead_email parameter"
+                }
+        
+        # Get team lead info
+        team_lead = await self.db.users.find_one({"id": team_lead_id})
+        if not team_lead:
+            return {
+                "success": False,
+                "action": "get_team_members",
+                "error": "Team lead not found"
+            }
+        
+        department_id = team_lead.get("department_id")
+        
+        # Find team members (employees/interns in same department)
+        query = {
+            "role": {"$in": ["employee", "intern"]}
+        }
+        if department_id:
+            query["department_id"] = department_id
+        
+        members = await self.db.users.find(query).to_list(1000)
+        
+        member_list = [
+            {
+                "id": member["id"],
+                "name": member.get("name", "Unknown"),
+                "email": member.get("email", ""),
+                "role": member.get("role", "employee")
+            }
+            for member in members
+        ]
+        
+        return {
+            "success": True,
+            "action": "get_team_members",
+            "details": {
+                "team_lead": {
+                    "id": team_lead["id"],
+                    "name": team_lead.get("name", "Unknown"),
+                    "email": team_lead.get("email", ""),
+                    "role": "team_lead"
+                },
+                "members": member_list,
+                "count": len(member_list)
+            }
+        }
+
     async def _apply_leave(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Apply for leave"""
         leave_id = str(uuid.uuid4())
@@ -530,16 +692,21 @@ class AIActionExecutor:
         if self.user_role not in ["admin", "hr", "team_lead"]:
             return {"success": False, "action": "list_team_tasks", "error": "Only Team Leads can view team tasks"}
         
-        # Get all tasks created by this team lead
         tasks = await self.db.tasks.find({"created_by": self.user_id}).to_list(100)
+        
+        # Get user info for enrichment
+        all_user_ids = list(set([task["assigned_to"] for task in tasks] + [task["created_by"] for task in tasks]))
+        user_map = await self._get_user_map(all_user_ids)
         
         task_summaries = []
         for task in tasks:
-            assignee = await self.db.users.find_one({"id": task["assigned_to"]})
+            assigned_to_info = user_map.get(task["assigned_to"], {"name": "Unknown", "email": ""})
+            
             task_summaries.append({
                 "task_id": task["id"],
                 "title": task["title"],
-                "assignee": assignee.get("name") if assignee else task["assigned_to"],
+                "assignee": assigned_to_info["name"],
+                "assignee_email": assigned_to_info["email"],
                 "status": task["status"],
                 "priority": task["priority"],
                 "progress": task.get("progress", 0)
@@ -559,7 +726,6 @@ class AIActionExecutor:
         if self.user_role not in ["admin", "hr", "team_lead"]:
             return {"success": False, "action": "generate_team_summary", "error": "Only Team Leads can generate team summaries"}
         
-        # Get team tasks
         tasks = await self.db.tasks.find({"created_by": self.user_id}).to_list(1000)
         
         total_tasks = len(tasks)
@@ -596,12 +762,10 @@ class AIActionExecutor:
         
         employee_id = employee["id"]
         
-        # Get tasks
         tasks = await self.db.tasks.find({"assigned_to": employee_id}).to_list(1000)
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t["status"] == "completed"])
         
-        # Get attendance (last 30 days)
         end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
         attendance = await self.db.attendance.find({
@@ -611,7 +775,6 @@ class AIActionExecutor:
         
         present_days = len([a for a in attendance if a["status"] in ["present", "wfh"]])
         
-        # Get leaves
         leaves = await self.db.leaves.find({"user_id": employee_id}).to_list(100)
         total_leaves = len(leaves)
         
@@ -653,18 +816,15 @@ class AIActionExecutor:
         
         intern_id = intern["id"]
         
-        # Get tasks
         tasks = await self.db.tasks.find({"assigned_to": intern_id}).to_list(1000)
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t["status"] == "completed"])
         avg_progress = sum([t.get("progress", 0) for t in tasks]) / total_tasks if total_tasks > 0 else 0
         
-        # Get attendance
         attendance = await self.db.attendance.find({"user_id": intern_id}).to_list(1000)
         total_days = len(attendance)
         present_days = len([a for a in attendance if a["status"] in ["present", "wfh"]])
         
-        # Simple evaluation
         performance_score = (completed_tasks / total_tasks * 50 + avg_progress * 0.3 + present_days / total_days * 20) if total_tasks > 0 and total_days > 0 else 0
         
         return {
@@ -691,10 +851,8 @@ class AIActionExecutor:
     async def _summarize_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Summarize current user's tasks with urgent task identification"""
         try:
-            # Fetch user's tasks
             tasks = await self.db.tasks.find({"assigned_to": self.user_id}).sort("created_at", -1).to_list(100)
             
-            # Count by status
             status_counts = {
                 "todo": 0,
                 "in_progress": 0,
@@ -707,28 +865,32 @@ class AIActionExecutor:
                 if status in status_counts:
                     status_counts[status] += 1
             
-            # Get urgent tasks (only todo and in_progress)
             urgent_tasks = []
             for task in tasks:
                 if task.get("status") in ["todo", "in_progress"]:
                     urgent_tasks.append(task)
             
-            # Sort by deadline (closest first) and priority
             priority_order = {"urgent": 0, "high": 1, "medium": 2, "low": 3}
             urgent_tasks.sort(key=lambda t: (
                 t.get("deadline", "9999-12-31"),
                 priority_order.get(t.get("priority", "medium"), 2)
             ))
             
+            # Get user info for enrichment
+            all_user_ids = list(set([task["assigned_to"] for task in urgent_tasks[:5]] + [task["created_by"] for task in urgent_tasks[:5]]))
+            user_map = await self._get_user_map(all_user_ids)
+            
             top_tasks = []
             for task in urgent_tasks[:5]:
+                created_by_info = user_map.get(task["created_by"], {"name": "Unknown"})
                 top_tasks.append({
                     "id": task["id"],
                     "title": task.get("title"),
                     "status": task.get("status"),
                     "priority": task.get("priority", "medium"),
                     "deadline": task.get("deadline", "No deadline"),
-                    "progress": task.get("progress", 0)
+                    "progress": task.get("progress", 0),
+                    "created_by_name": created_by_info["name"]
                 })
             
             return {
@@ -750,7 +912,6 @@ class AIActionExecutor:
     async def _summarize_notifications(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Summarize recent notifications for current user"""
         try:
-            # Fetch user's notifications
             query = {
                 "$or": [
                     {"user_id": self.user_id},
@@ -759,7 +920,6 @@ class AIActionExecutor:
             }
             notifications = await self.db.notifications.find(query).sort("created_at", -1).limit(20).to_list(20)
             
-            # Group by type and read status
             type_counts = {}
             unread_count = 0
             
@@ -769,7 +929,6 @@ class AIActionExecutor:
                 if not notif.get("is_read", False):
                     unread_count += 1
             
-            # Get recent unread titles
             recent_unread = []
             for notif in notifications:
                 if not notif.get("is_read", False) and len(recent_unread) < 5:
@@ -801,7 +960,6 @@ class AIActionExecutor:
         try:
             today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
             
-            # Get today's attendance
             today_attendance = await self.db.attendance.find_one({
                 "user_id": self.user_id,
                 "date": today
@@ -825,7 +983,6 @@ class AIActionExecutor:
                     "check_out": None
                 }
             
-            # Get last 7 days summary
             seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d')
             recent_attendance = await self.db.attendance.find({
                 "user_id": self.user_id,
@@ -897,12 +1054,21 @@ def get_action_definitions() -> List[Dict[str, Any]]:
         },
         {
             "name": "list_user_tasks",
-            "description": "List tasks for current user, optionally filter by status",
+            "description": "List tasks for current user or specified user (with hierarchy checks)",
             "parameters": {
                 "user_id": "User ID (optional, defaults to current user)",
+                "user_email": "Target user email (Admin/HR/TeamLead only, optional)",
                 "status": "Filter by status: todo/in_progress/completed/blocked (optional)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
+        },
+        {
+            "name": "get_team_members",
+            "description": "Get team members under a team lead based on department",
+            "parameters": {
+                "team_lead_email": "Team lead email (optional, used by HR/Admin to inspect specific team)"
+            },
+            "permissions": ["admin", "hr", "team_lead"]
         },
         {
             "name": "summarize_tasks",
