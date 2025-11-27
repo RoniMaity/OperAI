@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
@@ -10,6 +11,7 @@ export default function EmployeeDashboard() {
   const [tasks, setTasks] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
@@ -72,7 +74,11 @@ export default function EmployeeDashboard() {
         </div>
 
         <div className="dashboard-grid">
-          <Card className="stat-card bg-card border-border" data-testid="stat-my-tasks">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-my-tasks"
+            onClick={() => navigate('/tasks')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">My Tasks</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
@@ -83,18 +89,26 @@ export default function EmployeeDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-pending-tasks">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-pending-tasks"
+            onClick={() => navigate('/tasks?status=in_progress')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-card-foreground">Pending</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">In Progress</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-card-foreground">{stats?.pending_tasks || 0}</div>
-              <p className="text-xs text-muted-foreground">Tasks to do</p>
+              <p className="text-xs text-muted-foreground">Tasks in progress</p>
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-completed-tasks">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-completed-tasks"
+            onClick={() => navigate('/tasks?status=completed')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Completed</CardTitle>
               <CheckSquare className="h-4 w-4 text-muted-foreground" />
@@ -105,7 +119,11 @@ export default function EmployeeDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="stat-card bg-card border-border" data-testid="stat-my-leaves">
+          <Card 
+            className="stat-card bg-card border-border cursor-pointer hover:shadow-lg transition-shadow" 
+            data-testid="stat-my-leaves"
+            onClick={() => navigate('/leave')}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-card-foreground">Leave Requests</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
