@@ -103,28 +103,38 @@ class AIActionExecutor:
         """Update task status"""
         task_id = params.get("task_id")
         new_status = params.get("status")
+        progress = params.get("progress")
+        
+        if not task_id:
+            return {"success": False, "action": "update_task_status", "error": "task_id required"}
         
         task = await self.db.tasks.find_one({"id": task_id})
         if not task:
-            return {"success": False, "error": "Task not found"}
+            return {"success": False, "action": "update_task_status", "error": "Task not found"}
         
         if self.user_role not in ["admin", "hr", "team_lead"] and task["assigned_to"] != self.user_id:
-            return {"success": False, "error": "Insufficient permissions"}
+            return {"success": False, "action": "update_task_status", "error": "Insufficient permissions"}
         
-        await self.db.tasks.update_one(
-            {"id": task_id},
-            {"$set": {
-                "status": new_status,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
+        update_fields = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        
+        if new_status:
+            update_fields["status"] = new_status
+            if new_status == "completed" and progress != 100:
+                update_fields["progress"] = 100
+        
+        if progress is not None:
+            update_fields["progress"] = min(100, max(0, int(progress)))
+        
+        await self.db.tasks.update_one({"id": task_id}, {"$set": update_fields})
         
         return {
             "success": True,
             "action": "update_task_status",
             "details": {
                 "task_id": task_id,
-                "new_status": new_status
+                "task_title": task.get("title"),
+                "new_status": new_status,
+                "progress": update_fields.get("progress", task.get("progress"))
             }
         }
     
