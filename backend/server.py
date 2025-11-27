@@ -1012,7 +1012,13 @@ IMPORTANT:
         logger.error(f"AI execute error: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"AI service error: {str(e)}")
+        return {
+            "response": "I encountered an error processing your request. Please try again.",
+            "thought": "Error occurred",
+            "actions_executed": [],
+            "session_id": ai_request.session_id,
+            "error": str(e)
+        }
 
 
 @api_router.get("/ai/history")
