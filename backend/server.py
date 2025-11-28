@@ -12,17 +12,26 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
 import jwt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+# from emergentintegrations.llm.chat import LlmChat, UserMessage  # TODO: Install emergentintegrations package
 import json
 import re
+from litellm import acompletion
+import google.generativeai as genai
 
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / '.env', override=True)
+
+print(f"Loaded .env from {ROOT_DIR / '.env'}")
+print(f"GOOGLE_API_KEY present: {'GOOGLE_API_KEY' in os.environ}")
+print(f"EMERGENT_LLM_KEY present: {'EMERGENT_LLM_KEY' in os.environ}")
+
+# MongoDB connection
+import certifi
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
 db = client[os.environ['DB_NAME']]
 
 # JWT Configuration
@@ -44,6 +53,72 @@ api_router = APIRouter(prefix="/api")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+async def seed_demo_data():
+    """Seed database with demo data if not exists"""
+    try:
+        # 1. Create Engineering Department
+        dept = await db.departments.find_one({"name": "Engineering"})
+        if not dept:
+            dept_id = str(uuid.uuid4())
+            dept = {
+                "id": dept_id,
+                "name": "Engineering",
+                "description": "Engineering Department",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.departments.insert_one(dept)
+            logger.info("Created Engineering department")
+        else:
+            dept_id = dept["id"]
+            
+        # 2. Create Demo Users
+        # Passwords match frontend Quick Fill (Password123!)
+        common_password = "Password123!"
+        hashed_password = pwd_context.hash(common_password)
+        
+        demo_users = [
+            {"email": "admin@operai.demo", "name": "Admin User", "role": "admin", "dept": None},
+            {"email": "hr@operai.demo", "name": "HR Manager", "role": "hr", "dept": None},
+            {"email": "lead@operai.demo", "name": "Roni (Team Lead)", "role": "team_lead", "dept": dept_id},
+            {"email": "emp1@operai.demo", "name": "John Doe", "role": "employee", "dept": dept_id},
+            {"email": "intern@operai.demo", "name": "Sarah Intern", "role": "intern", "dept": dept_id}
+        ]
+        
+        for user_data in demo_users:
+            existing = await db.users.find_one({"email": user_data["email"]})
+            if not existing:
+                new_user = {
+                    "id": str(uuid.uuid4()),
+                    "email": user_data["email"],
+                    "name": user_data["name"],
+                    "role": user_data["role"],
+                    "department_id": user_data["dept"],
+                    "password": hashed_password,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "is_active": True
+                }
+                await db.users.insert_one(new_user)
+                logger.info(f"Created demo user: {user_data['email']}")
+            else:
+                # Update password and department to ensure they work
+                update_fields = {"password": hashed_password}
+                if user_data["dept"]:
+                    update_fields["department_id"] = user_data["dept"]
+                
+                await db.users.update_one(
+                    {"email": user_data["email"]},
+                    {"$set": update_fields}
+                )
+                logger.info(f"Updated demo user: {user_data['email']}")
+
+    except Exception as e:
+        logger.error(f"Seeding error: {e}")
+
+@app.on_event("startup")
+async def startup_db_client():
+    await seed_demo_data()
 
 
 # ===== MODELS =====
@@ -387,6 +462,7 @@ def extract_json_from_response(text: str) -> dict:
 # ===== AUTH ENDPOINTS =====
 @api_router.post("/auth/register", response_model=User)
 async def register(user_data: UserCreate):
+    print(f"Registering user: {user_data.email}")
     # Check if user exists
     existing_user = await db.users.find_one({"email": user_data.email})
     if existing_user:
@@ -1172,14 +1248,78 @@ async def build_user_context(user_id: str, role: str) -> str:
     return ""
 
 
+# Mock classes for Emergent Integrations (since package is missing)
+class UserMessage:
+    def __init__(self, text):
+        self.text = text
+
+class LlmChat:
+    def __init__(self, api_key, session_id, system_message):
+        self.api_key = api_key
+        self.session_id = session_id
+        self.system_message = system_message
+    
+    def with_model(self, provider, model):
+        pass
+        
+    async def send_message(self, user_message):
+        # If using the demo key, return mock response
+        if not self.api_key or self.api_key.startswith("sk-emergent"):
+            return self.mock_response(user_message)
+            
+        # Use Google Generative AI for Google keys
+        if self.api_key.startswith("AIza"):
+            try:
+                genai.configure(api_key=self.api_key)
+                model = genai.GenerativeModel('gemini-2.0-flash')
+                prompt = f"{self.system_message}\n\nUser: {user_message.text}"
+                response = await model.generate_content_async(prompt)
+                return response.text
+            except Exception as e:
+                # logging.error(f"Gemini error: {e}")
+                print(f"Gemini error: {e}")
+                return f"Error connecting to Gemini: {str(e)}. Falling back to demo mode.\n\n" + self.mock_response(user_message)
+
+        # Use litellm for others (OpenAI)
+        try:
+            # Auto-detect model if not set or if generic
+            model = "gpt-3.5-turbo"
+            
+            response = await acompletion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": self.system_message},
+                    {"role": "user", "content": user_message.text}
+                ],
+                api_key=self.api_key
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Litellm error: {e}")
+            return f"Error connecting to AI provider: {str(e)}. Falling back to demo mode.\n\n" + self.mock_response(user_message)
+
+    def mock_response(self, user_message):
+        msg = user_message.text.lower()
+        if "hello" in msg or "hi" in msg:
+            return "Hello! I am OperAI Intelligence. How can I help you with your workforce tasks today?"
+        elif "leave" in msg:
+            return "I can help you apply for leave. Please tell me the dates and reason."
+        elif "task" in msg:
+            return "I can show you your tasks. You currently have no urgent tasks pending."
+        elif "attendance" in msg:
+            return "Your attendance for today is not marked yet. Would you like me to mark it?"
+        else:
+            return f"I understood: '{user_message.text}'. As this is a local demo, I can only respond to basic commands about tasks, leave, and attendance."
+
+
 @api_router.post("/ai/chat")
 async def ai_chat(
     ai_request: AIRequest,
     current_user: TokenData = Depends(get_current_user)
 ):
     try:
-        # Check if EMERGENT_LLM_KEY is available
-        llm_key = os.environ.get('EMERGENT_LLM_KEY')
+        # Check for keys (prioritize real keys)
+        llm_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
         if not llm_key:
             return {
                 "response": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
@@ -1253,10 +1393,10 @@ async def ai_execute(
     current_user: TokenData = Depends(get_current_user)
 ):
     try:
-        from services.ai_actions import AIActionExecutor, get_action_definitions
+        from backend.services.ai_actions import AIActionExecutor, get_action_definitions
         
-        # Check if EMERGENT_LLM_KEY is available
-        llm_key = os.environ.get('EMERGENT_LLM_KEY')
+        # Check for keys (prioritize real keys)
+        llm_key = os.environ.get('GOOGLE_API_KEY') or os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
         if not llm_key:
             return {
                 "message": "AI service is temporarily unavailable. Please ensure EMERGENT_LLM_KEY is configured.",
@@ -1320,6 +1460,8 @@ For TASK queries:
 - "show my tasks", "mera task dikhao", "what are my tasks", "list my tasks" → list_user_tasks with NO params
 - "show my pending tasks", "pending tasks kya hain" → list_user_tasks with status="todo"
 - "show active tasks", "active tasks dikhao" → list_user_tasks with status="in_progress"
+- "show tasks I assigned", "tasks created by me" → list_user_tasks with created_by_email="me"
+- "show tasks I assigned to John" → list_user_tasks with created_by_email="me" and assigned_to_email="john@example.com"
 - "summarize my tasks", "task ka summary do" → summarize_tasks with NO params
 - "show my work", "what should I do" → summarize_tasks
 
@@ -1522,9 +1664,23 @@ If you can't perform an action, return empty actions array [] and explain why in
             parsed = extract_json_from_response(ai_response)
         except Exception as parse_error:
             logger.error(f"Failed to parse AI response: {ai_response[:300]}")
+            # Fallback: treat the entire response as a message/thought
+            # Save to database
+            ai_message = AIMessage(
+                user_id=current_user.user_id,
+                session_id=ai_request.session_id,
+                message=ai_request.message,
+                response=ai_response,
+                action_type="chat",
+                actions_executed=[]
+            )
+            doc = ai_message.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.ai_messages.insert_one(doc)
+
             return {
-                "message": "I understood your request but had trouble processing it. Could you try rephrasing in simpler terms?",
-                "thought": "Failed to parse my own output format",
+                "message": ai_response,
+                "thought": "Processed as conversational response",
                 "actionsExecuted": [],
                 "session_id": ai_request.session_id
             }
@@ -1837,12 +1993,7 @@ async def mark_all_notifications_read(current_user: TokenData = Depends(get_curr
     await db.notifications.update_many(query, {"$set": {"is_read": True}})
     
     return {"message": "All notifications marked as read"}
-
-
-# Mount API router
-app.include_router(api_router)
-
-# CORS
+# CORS - Must be added BEFORE mounting routers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1850,6 +2001,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Mount API router
+app.include_router(api_router)
 
 
 @app.get("/")

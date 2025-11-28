@@ -32,8 +32,8 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       toast.success(`Welcome back, ${user.name}!`);
-      
-      switch(user.role) {
+
+      switch (user.role) {
         case 'admin':
         case 'hr':
           navigate('/hr-dashboard');
@@ -77,9 +77,7 @@ export default function LoginPage() {
           {showDemoAccounts && (
             <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                  🎯 Demo Accounts - Quick Access
-                </h3>
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100">🎯 Demo Accounts - Quick Access</h3>
                 <button
                   onClick={() => setShowDemoAccounts(false)}
                   className="text-xs text-blue-700 dark:text-blue-300 hover:underline"
@@ -88,22 +86,46 @@ export default function LoginPage() {
                 </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {DEMO_ACCOUNTS.map((account) => {
-                  const Icon = account.icon;
-                  return (
-                    <button
-                      key={account.email}
-                      onClick={() => handleQuickFill(account)}
-                      className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
-                      type="button"
-                    >
-                      <Icon className={`h-5 w-5 ${account.color} group-hover:scale-110 transition-transform`} />
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {account.role}
-                      </span>
-                    </button>
-                  );
-                })}
+                <button
+                  onClick={() => handleQuickFill(DEMO_ACCOUNTS[0])}
+                  className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-shield h-5 w-5 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Admin</span>
+                </button>
+                <button
+                  onClick={() => handleQuickFill(DEMO_ACCOUNTS[1])}
+                  className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-users h-5 w-5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">HR</span>
+                </button>
+                <button
+                  onClick={() => handleQuickFill(DEMO_ACCOUNTS[2])}
+                  className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase h-5 w-5 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path><rect width="20" height="14" x="2" y="6" rx="2"></rect></svg>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Team Lead</span>
+                </button>
+                <button
+                  onClick={() => handleQuickFill(DEMO_ACCOUNTS[3])}
+                  className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-user h-5 w-5 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Employee</span>
+                </button>
+                <button
+                  onClick={() => handleQuickFill(DEMO_ACCOUNTS[4])}
+                  className="flex flex-col items-center gap-1 p-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 group"
+                  type="button"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-graduation-cap h-5 w-5 text-pink-600 dark:text-pink-400 group-hover:scale-110 transition-transform" aria-hidden="true"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"></path><path d="M22 10v6"></path><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"></path></svg>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Intern</span>
+                </button>
               </div>
               <p className="mt-3 text-xs text-blue-700 dark:text-blue-300 text-center">
                 Click any role to auto-fill credentials • Password: Password123!
@@ -169,14 +191,14 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-          
+
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">Don't have an account?</span>{' '}
             <Link to="/register" className="text-primary hover:underline font-medium" data-testid="register-link">
               Register
             </Link>
           </div>
-          
+
           <div className="mt-4 p-3 bg-muted/50 rounded-md border border-border">
             <p className="text-xs text-muted-foreground text-center">
               💡 <strong>Demo Mode:</strong> Use the quick access buttons above or see{' '}

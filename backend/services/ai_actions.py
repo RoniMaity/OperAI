@@ -252,8 +252,11 @@ class AIActionExecutor:
     async def _list_user_tasks(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """List tasks for current user or specified user with hierarchy visibility"""
         user_id = params.get("user_id")
-        user_email = params.get("user_email") or params.get("employee_email")
+        user_email = params.get("user_email") or params.get("employee_email") or params.get("assigned_to_email")
+        created_by_email = params.get("created_by_email") or params.get("assigned_by_email")
         status_filter = params.get("status")
+        
+        query = {}
         
         # If email provided, look up user_id
         if user_email and not user_id:
@@ -267,29 +270,60 @@ class AIActionExecutor:
                     "error": f"User not found with email: {user_email}"
                 }
         
-        # RBAC checks
-        if self.user_role not in ["admin", "hr", "team_lead"]:
-            # Employee/Intern: Force to own tasks
-            user_id = self.user_id
-        else:
-            # Admin/HR/Team Lead
-            if user_id and user_id != self.user_id:
-                # They're trying to view someone else's tasks
-                if self.user_role == "team_lead":
-                    # Team lead can only view their subordinates
-                    subordinate_ids = await self._get_subordinate_user_ids()
-                    if user_id not in subordinate_ids:
-                        return {
-                            "success": False,
-                            "action": "list_user_tasks",
-                            "error": "Team leads can only view tasks of their team members"
-                        }
-                # Admin/HR can view anyone
+        # Resolve created_by
+        if created_by_email:
+            if created_by_email == "me" or created_by_email == self.user_email:
+                query["created_by"] = self.user_id
             else:
-                # Default to self if no user_id specified
-                user_id = self.user_id
+                creator = await self.db.users.find_one({"email": created_by_email})
+                if creator:
+                    query["created_by"] = creator["id"]
+                else:
+                    return {
+                        "success": False,
+                        "action": "list_user_tasks",
+                        "error": f"Creator not found with email: {created_by_email}"
+                    }
+
+        # Default to self if no filters provided
+        if not user_id and "created_by" not in query:
+            user_id = self.user_id
+            
+        if user_id:
+            query["assigned_to"] = user_id
         
-        query = {"assigned_to": user_id}
+        # RBAC checks
+        # If viewing own tasks (assigned_to=self OR created_by=self), allow
+        is_own_tasks = (user_id == self.user_id) or (query.get("created_by") == self.user_id)
+        
+        if not is_own_tasks:
+            if self.user_role not in ["admin", "hr", "team_lead"]:
+                return {
+                    "success": False,
+                    "action": "list_user_tasks",
+                    "error": "Insufficient permissions to view others' tasks"
+                }
+            
+            # Team Lead checks
+            if self.user_role == "team_lead":
+                subordinate_ids = await self._get_subordinate_user_ids()
+                # Can view if assigned to subordinate OR created by subordinate
+                target_assigned = query.get("assigned_to")
+                target_created = query.get("created_by")
+                
+                allowed = True
+                if target_assigned and target_assigned not in subordinate_ids:
+                    allowed = False
+                if target_created and target_created not in subordinate_ids:
+                    allowed = False
+                    
+                if not allowed:
+                     return {
+                        "success": False,
+                        "action": "list_user_tasks",
+                        "error": "Team leads can only view tasks of their team members"
+                    }
+
         if status_filter:
             query["status"] = status_filter
         
@@ -318,15 +352,25 @@ class AIActionExecutor:
                 "created_by_email": created_by_info["email"]
             })
         
-        # Get target user name for response
-        target_user = await self.db.users.find_one({"id": user_id})
-        target_name = target_user.get("name") if target_user else "the user"
+        # Determine context for response
+        context_msg = "tasks"
+        if user_id:
+            target_user = await self.db.users.find_one({"id": user_id})
+            target_name = target_user.get("name") if target_user else "the user"
+            context_msg = f"tasks assigned to {target_name}"
         
+        if "created_by" in query:
+            creator_name = "you" if query["created_by"] == self.user_id else "the creator"
+            if user_id:
+                context_msg += f" (created by {creator_name})"
+            else:
+                context_msg = f"tasks created by {creator_name}"
+
         return {
             "success": True,
             "action": "list_user_tasks",
             "details": {
-                "user": target_name,
+                "user": context_msg, # Using 'user' field for context message to keep frontend happy? Or just generic.
                 "count": len(task_summaries),
                 "tasks": task_summaries
             }
@@ -1118,6 +1162,8 @@ def get_action_definitions() -> List[Dict[str, Any]]:
             "parameters": {
                 "user_id": "User ID (optional, defaults to current user)",
                 "user_email": "Target user email (Admin/HR/TeamLead only, optional)",
+                "assigned_to_email": "Alias for user_email (optional)",
+                "created_by_email": "Filter by creator email (e.g., 'me' for self) (optional)",
                 "status": "Filter by status: todo/in_progress/completed/blocked (optional)"
             },
             "permissions": ["admin", "hr", "team_lead", "employee", "intern"]
